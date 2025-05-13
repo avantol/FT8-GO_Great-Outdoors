@@ -3,14 +3,15 @@
 Summary: Create a Linux Lite 3.4 32-bit installer USB stick, ISO available at:
 https://repo.linuxliteos.com/linuxlite/isos/3.4/linux-lite-3.4-32bit.iso
 
-2) To create an FT8-GO ("Get Outdoors") installation USB stick:
-Copy the contents of the folder "FT8-GO_USB" to the prepared USB stick.
+2) To create an FT8-GO ("Great Outdoors") installation USB stick:
+Copy the files at the "Releases" page (except the source code files,
+the last two) to the prepared USB stick.
 
 3) Follow the user-installation instructions, below.
 
 ================================================================
 
-Instructions for installing FT8-GO ("Get Outdoors") by WM8Q
+Instructions for installing FT8-GO ("Great Outdoors") by WM8Q
 
 FT8-GO creates a single-purpose laptop with optimized FT8
 operation and helpful additions, recommended for
@@ -19,8 +20,9 @@ re-purposing laptops up to 12 years old.
 because of the processing demands of current operating
 systems and FT8 versions).
 
-When you "Get Outdoors" for FT8, leave your expensive
-new laptop at home, an old laptop does the job.
+When you're ready to go to the "Great Outdoors" for FT8,
+leave your expensive new laptop at home, an old laptop
+does the job.
 
 Plus: One-click upload to Logbook of the World,
 one-click downloading current QSOs before operating.
@@ -66,7 +68,7 @@ Before starting:
 To install FT8-GO:
 ==================
 
-- Start up your laptpo with the FT8-Go USB stick.
+- Start up your laptop with the FT8-Go USB stick.
 
 - Select "Install Linux" icon.
 
