@@ -1,16 +1,6 @@
 # FT8-GO (Great Outdoors)
-1) See INSTALL for information on preparing a USB stick.
-Summary: Create a Linux Lite 3.4 32-bit installer USB stick, ISO available at:
-https://repo.linuxliteos.com/linuxlite/isos/3.4/linux-lite-3.4-32bit.iso
-
-2) To create an FT8-GO ("Get Outdoors") installation USB stick:
-Copy the contents of the folder "FT8-GO_USB" to the prepared USB stick.
-
-3) Follow the user-installation instructions, below.
-
-================================================================
-
-Instructions for installing FT8-GO ("Get Outdoors") by WM8Q
+FT8-GO (Great Outdoors) description
+===================================
 
 FT8-GO creates a single-purpose laptop with optimized FT8
 operation and helpful additions, recommended for
@@ -19,7 +9,7 @@ re-purposing laptops up to 12 years old.
 because of the processing demands of current operating
 systems and FT8 versions).
 
-When you "Get Outdoors" for FT8, leave your expensive
+When you go to the "Great Outdoors" for FT8, leave your expensive
 new laptop at home, an old laptop does the job.
 
 Plus: One-click upload to Logbook of the World,
@@ -39,9 +29,20 @@ field operation, take the one with the best battery
 charge, best USB ports, best screen, etc. and
 get current "worked-before" status with one click.
 
-*Semi-auto QSOs comply with Field Day rules
-as of 2025, specifically rule "6.4", all QSOs
-initiated manually.
+Instructions for creating the FT8-GO ("Great Outdoors") installer
+=================================================================
+
+1) See INSTALL for information on preparing a USB stick.
+Summary: Create a Linux Lite 3.4 32-bit installer USB stick, ISO available at:
+https://repo.linuxliteos.com/linuxlite/isos/3.4/linux-lite-3.4-32bit.iso
+
+2) To create an FT8-GO ("Great Outdoors") installation USB stick:
+Copy the files (except the two source code files) at the "Releases" page to the prepared USB stick.
+
+3) Follow the user-installation instructions, below.
+
+FT8-GO User Installation instructions
+=====================================
 
 Before starting:
 ================
@@ -63,10 +64,10 @@ Before starting:
   
 - Have your Logbook of the World (LOTW) password ready.
 
-To install FT8-GO:
-==================
+To install FT8-GO on your laptop:
+================================
 
-- Start up your laptpo with the FT8-Go USB stick.
+- Start up your laptop with the FT8-GO USB stick.
 
 - Select "Install Linux" icon.
 
@@ -192,4 +193,3 @@ To update your laptop with your latest QSOs
 select "File|Download all QSOs from LOTW"
 every time before you begin an FT8 session.
 
-*end*
