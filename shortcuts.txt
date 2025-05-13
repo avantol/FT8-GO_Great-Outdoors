@@ -1,0 +1,28 @@
+<table cellspacing=1>
+  <tr><td><b>Esc      </b></td><td>Stop Tx, abort QSO, clear next-call queue</td></tr>
+  <tr><td><b>Ctrl+N   </b></td><td>Skip to next call in queue</td></tr>
+  <tr><td><b>Ctrl+R   </b></td><td>Reply to call (or add to call queue)</td></tr>
+  <tr><td><b>Ctrl+I   </b></td><td>Ignore call (add to 'Ignore' list)</td></tr>
+  <tr><td><b>Ctrl+S   </b></td><td>Enable/disable alert sounds</td></tr>
+  <tr><td><b>Ctrl+Z   </b></td><td>Enable/disable debug log</td></tr>
+  <tr><td><b>Ctrl+D   </b></td><td>Download ADIF log from LOTW</td></tr>
+  <tr><td><b>Ctrl+U   </b></td><td>Upload ADIF log to LOTW</td></tr>
+  <tr><td><b>Ctrl+L   </b></td><td>Lock Tx period to current 'Tx even/1st' selection</td></tr>
+  <tr><td><b>F1       </b></td><td>Online User's Guide</td></tr>
+  <tr><td><b>Ctrl+F1  </b></td><td>About WSJT-X</td></tr>
+  <tr><td><b>F2       </b></td><td>Open settings window</td></tr>
+  <tr><td><b>F3       </b></td><td>Display keyboard shortcuts</td></tr>
+  <tr><td><b>F4       </b></td><td>Clear DX Call, DX Grid, Tx messages 1-4</td></tr>
+  <tr><td><b>Alt+F4   </b></td><td>Exit program</td></tr>
+  <tr><td><b>Ctrl+E   </b></td><td>Turn on TX even/1st</td></tr>
+  <tr><td><b>Shift+E  </b></td><td>Turn off TX even/1st</td></tr>
+  <tr><td><b>Alt+E    </b></td><td>Erase</td></tr>
+  <tr><td><b>Ctrl+F   </b></td><td>Edit the free text message box</td></tr>
+  <tr><td><b>Alt+G    </b></td><td>Generate standard messages</td></tr>
+  <tr><td><b>Alt+H    </b></td><td>Halt Tx</td></tr>
+  <tr><td><b>Ctrl+L   </b></td><td>Lookup callsign in database, generate standard messages</td></tr>
+  <tr><td><b>Alt+M    </b></td><td>Monitor</td></tr>
+  <tr><td><b>Alt+Q    </b></td><td>Log QSO</td></tr>
+  <tr><td><b>Alt+S    </b></td><td>Stop monitoring</td></tr>
+  <tr><td><b>Alt+T    </b></td><td>Tune</td></tr>
+</table>

@@ -1,0 +1,64 @@
+=== New in Version {VERSION}
+
+For quick reference, here's a short list of features and capabilities
+added to _WSJT-X_ since Version 1.9.1:
+
+- New FT8 and MSK144 protocols with 77-bit payloads permit these enhancements:
+
+* Optimized contest messages for NA VHF, EU VHF, Field Day, RTTY Roundup
+
+* Full support for "/R" and "/P" calls in relevant contests
+
+* New logging features for contesting
+
+* Integration with {n1mm_logger} and {writelog} for contesting
+
+* Improved support for compound and nonstandard callsigns
+
+* Nearly equal (or better) sensitivity compared to old protocols
+
+* Lower false decode rates
+
+- Improved color highlighting of received messages
+
+- Improved WSPR sensitivity
+
+- Expanded and improved UDP messages sent to companion programs
+
+- Bug fixes and other minor tweaks to user interface
+
+IMPORTANT: Note that for FT8 and MSK144 there is no backward
+compatibility with WSJT-X 1.9.1 and earlier.  Everyone using these
+modes should upgrade to WSJT-X 2.0 by January 1, 2019.
+
+IMPORTANT: _WSJT-X_ Version 2.0 drops support for Apple Mac OS X 10.9
+(Mavericks). It is possible to build from source for this operating
+system version but the DMG installer package requires 10.10 or later.
+
+
+=== Documentation Conventions
+
+In this manual the following icons call attention to particular types
+of information:
+
+NOTE: *Notes* containing information that may be of interest to
+particuar classes of users.
+
+TIP: *Tips* on program features or capabilities that might otherwise be
+overlooked.
+
+IMPORTANT: *Warnings* about usage that could lead to undesired
+consequences.
+
+=== How You Can Contribute
+
+_WSJT-X_ is part of an open-source project released under the
+{gnu_gpl} (GPLv3). If you have programming or documentation skills or
+would like to contribute to the project in other ways, please make
+your interests known to the development team.  The project's
+source-code repository can be found at {devrepo}, and communication
+among the developers takes place on the email reflector {devmail}.
+Bug reports and suggestions for new features, improvements to the
+_WSJT-X_ User Guide, etc., may also be sent to the {wsjt_yahoo_group}
+email reflector.  You must join the relevant group before posting to
+either email list.
