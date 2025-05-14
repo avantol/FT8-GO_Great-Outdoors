@@ -1,6 +1,6 @@
 # FT8-GO (Great Outdoors)
 
-See the release notes at:
+See the release notes at: \
 https://github.com/avantol/FT8-GO--Great-Outdoors-/releases/latest
 for information on creating the required installer disk.
 
