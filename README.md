@@ -31,3 +31,4 @@ Features:
 - Manual, semi-automatic, or full automatic QSOs, choose what suits you from minute to minute.
 
 - You can grab any of several FT8-GO laptops before you head out for field operation: Take the one with the best battery charge, best USB ports, best screen, best wifi, etc. .... and have your current "worked-before" status downloaded immediately from LOTW with one click. Easy transition in just seconds to a spare laptop in case of hardware failure!
+<br><br><img src="https://github.com/avantol/FT8-GO_Great-Outdoors/blob/main/FT8-GO_screenshot.png">
