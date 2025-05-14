@@ -20,7 +20,7 @@ Features:
 
 - Assisted 'Field Day' operation for a busy band, contacts are manually initiated.
 
-- Convenient options for any type of FT8 activity, including selectable message protocols, responding to specific CQs (directed. local, DX).
+- Convenient options for any type of FT8 activity, including selectable message sequences, responding to specific CQs (directed. local, DX).
 
 - Never lose track of a QSO you start, never miss logging slow-responding stations... excellent for fast-paced crowded bands.
 
@@ -31,3 +31,4 @@ Features:
 - Manual, semi-automatic, or full automatic QSOs, choose what suits you from minute to minute.
 
 - You can grab any of several FT8-GO laptops before you head out for field operation: Take the one with the best battery charge, best USB ports, best screen, best wifi, etc. .... and have your current "worked-before" status downloaded immediately from LOTW with one click. Easy transition in just seconds to a spare laptop in case of hardware failure!
+<br><br><img src="https://github.com/avantol/FT8-GO_Great-Outdoors/blob/main/FT8-GO_screenshot.png">
