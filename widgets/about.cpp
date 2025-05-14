@@ -14,12 +14,12 @@ CAboutDlg::CAboutDlg(QWidget *parent) :
   ui->setupUi(this);
   //avt 8/14/22
   ui->labelTxt->setText ("<h2>" + QString {"WSJT-X v"
-                         + QCoreApplication::applicationVersion () + " " + revision ()}.simplified () + " modified by WM8Q</h2><br />"
+                         + QCoreApplication::applicationVersion () + " " + revision ()}.simplified () + " modified for FT8-GO by WM8Q</h2><br />"
                          "This is a derivative work based on WSJT-X at <br /><a href=\"https://sourceforge.net/projects/wsjt\">"
                          "https://sourceforge.net/projects/wsjt</a><br /><br />"
 
-                         "Source code for modifications is at <br /><a href=\"https://sourceforge.net/u/k9avt/wsjt\">"
-                         "https://sourceforge.net/u/k9avt/wsjt</a><br />"
+                         "Source code for modifications is at <br /><a href=\"https://github.com/avantol/FT8-GO_Great-Outdoors\">"
+                         "https://github.com/avantol/FT8-GO_Great-Outdoors</a><br />"
                          "See 'Help|Copyright notice' for more information.<br /><br />"
 
                          "WSJT-X implements a number of digital modes designed for <br />"

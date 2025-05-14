@@ -4167,7 +4167,6 @@ void MainWindow::readFromStdout()                             //readFromStdout
                (ui->cbCQonly->isVisible() and ui->cbCQonly->isChecked()),m_isTxPeriod);
       }
       
-      
       int msgIdx = -1;      //avt 3/28/25
       
       foreach (DecodedText decodedtext, decodedtexts)
@@ -4180,6 +4179,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         QString toCall = decodedtext.toCall();
         debugToFile("readFromS toCall:'" + toCall + "' newcall:'" + newcall + "'");
         QString dirTo = decodedtext.dirTo();
+        bool for_us = toCall.contains (m_baseCall);
         bool is_73 = decodedtext.is_73();
         bool is_RR73 = decodedtext.is_RR73();
         bool is_ignore = false;
@@ -4198,7 +4198,8 @@ void MainWindow::readFromStdout()                             //readFromStdout
           + " is_cqPota:" + boolToString(is_cqPota)
           + " is_correctPeriod:" + boolToString(is_correctPeriod)
           );
-        debugToFile("readFromS is_reject:" + boolToString(is_reject)
+        debugToFile("readFromS for_us:" + boolToString(for_us)
+          + " is_reject:" + boolToString(is_reject)
           + " m_logbookRead:" + boolToString(m_logbookRead)
           + " is_73:" + boolToString(is_73)
           + " is_RR73:" + boolToString(is_RR73)
@@ -4259,19 +4260,19 @@ void MainWindow::readFromStdout()                             //readFromStdout
             ) {    //avt 2/26/25
           debugToFile("readFromS directed/wanted call detected");
 
-          if (workedBefore(newcall, decodedtext.grid(), is_potaHunt)) {
+          if (!for_us and workedBefore(newcall, decodedtext.grid(), is_potaHunt)) {  ///avt 5/13/25
             debugToFile("readFromS call logged previously, is_ignore:true");
             is_ignore = true;
-            } else {  //sound an alert
-               if (m_enableSound
-                  && !m_alertSounded    //avt 3/18/25
-                  && (!isAnyAutoMode())
-                  && !m_msgMap.contains(newcall)) {
-                QSound::play(m_config.data_dir ().absoluteFilePath ("BeepBeep.wav"));   //avt 10/12/22
-                m_alertSounded = true;    //avt 3/18/25
-              }
-              debugToFile("readFromS call not worked/logged before");
+          } else {  //sound an alert
+            if (m_enableSound
+                && !m_alertSounded    //avt 3/18/25
+                && (!isAnyAutoMode())
+                && !m_msgMap.contains(newcall)) {
+              QSound::play(m_config.data_dir ().absoluteFilePath ("BeepBeep.wav"));   //avt 10/12/22
+              m_alertSounded = true;    //avt 3/18/25
             }
+            debugToFile("readFromS call not worked/logged before");
+          }
         }
 
         //modify is_reject for right window
@@ -4283,7 +4284,6 @@ void MainWindow::readFromStdout()                             //readFromStdout
 //Right (Rx Frequency) window
         bool bDisplayRight=bAvgMsg;
         int audioFreq=decodedtext.frequencyOffset();
-        bool for_us = toCall.contains (m_baseCall);
         bool is_newLogged = false;
         bool is_hold = !ui->sbTxRepeat->value();     //avt 4/2/25
         bool msgProcessed = false;
