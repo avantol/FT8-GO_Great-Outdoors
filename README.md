@@ -20,7 +20,7 @@ Features:
 
 - Assisted 'Field Day' operation for a busy band, contacts are manually initiated.
 
-- Convenient options for any type of FT8 activity, including selectable message protocols, responding to specific CQs (directed. local, DX).
+- Convenient options for any type of FT8 activity, including selectable message sequences, responding to specific CQs (directed. local, DX).
 
 - Never lose track of a QSO you start, never miss logging slow-responding stations... excellent for fast-paced crowded bands.
 
