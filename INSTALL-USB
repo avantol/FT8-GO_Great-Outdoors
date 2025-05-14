@@ -1,10 +1,18 @@
-Copy the contents of the folder "FT8-GO_USB"
-to a USB stick containing the Linux Lite 3.4 32-bit
-installer, available at:
+Create a Linux Lite 3.4 32-bit installer on a USB flash drive.
+The ISO file is available at:
 https://repo.linuxliteos.com/linuxlite/isos/3.4/linux-lite-3.4-32bit.iso
 
+- Use only the Rufus image creator, it leaves the flash drive
+  writeable for thr next step. Rufus 3.4 is known to work.
+- Select 'FAT32' filesystem
+- The flash drive volume name MUST be: WSJTX
+
+Copy the files (except two source code files) at the FT8-GO release page:
+https://github.com/avantol/FT8-GO--Great-Outdoors-/releases/latest
+to the flash drive in the root folder.
+
 Note: *ONLY* this distribution and version of Linux
-is known to work for FT8-GO!
+shown above is known to work correctly for FT8-GO!
 
 Reason: FT8-GO is designed especifically for using
 low-spec processors (to re-purpose otherwise useless
