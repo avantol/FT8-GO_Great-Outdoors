@@ -4179,7 +4179,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         QString toCall = decodedtext.toCall();
         debugToFile("readFromS toCall:'" + toCall + "' newcall:'" + newcall + "'");
         QString dirTo = decodedtext.dirTo();
-        bool for_us = toCall.contains (m_baseCall);
+        bool for_us = m_baseCall.size() and toCall.contains(m_baseCall);
         bool is_73 = decodedtext.is_73();
         bool is_RR73 = decodedtext.is_RR73();
         bool is_ignore = false;
@@ -4187,7 +4187,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         bool is_wantedDxLocalCq = isWantedDxLocalDecode(decodedtext);
         bool is_cqPota = (toCall == "CQ" and dirTo == "POTA") and !m_loggedCalls.contains(newcall); //call possibly worked as non-POTA recently
         bool is_cqFd = (toCall == "CQ" and dirTo == "FD");
-        bool is_reject = !decodedtext.is_valid();
+        bool is_reject = !decodedtext.is_valid() or m_baseCall.isEmpty();   //avt 9/14/25
         bool is_potaHunt = is_cqPota || m_allPotaCalls.contains(newcall);
         bool is_correctPeriod = isCorrectPeriod(decodedtext);    //time period OK
 
@@ -4208,7 +4208,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
           );
 
         if (is_reject) {
-          debugToFile("readFromS %%% not valid '" + decodedtext.string().trimmed() + "', is_reject:true");
+          debugToFile("readFromS %%% rejected, m_baseCall:'" + m_baseCall + "' decodetext:'" + decodedtext.string().trimmed() + "'");
         } else {
           if (is_cqPota && !m_allPotaCalls.contains(newcall)) {
             m_allPotaCalls.insert(newcall);
