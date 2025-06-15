@@ -24,6 +24,8 @@ Features:
 
 - Never lose track of a QSO you start, never miss logging slow-responding stations... excellent for fast-paced crowded bands.
 
+- Optionally, call stations again that you have already worked if they haven't QSL'd you at LotW within a month.
+
 - Clear visual indications and audible alerts for all stations not worked yet, matching what you are looking for.
 
 - Bandwidth-conserving "Listen" mode, on both transmit periods.
