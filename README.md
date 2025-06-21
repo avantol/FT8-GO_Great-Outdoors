@@ -2,7 +2,7 @@
 
 See the release notes at:
 https://github.com/avantol/FT8-GO--Great-Outdoors-/releases/latest
-for the Windows / Linux / Raspberry Pi installation files, or information on creating an installation USB stick.
+for the Windows / Linux / Raspberry Pi installation files, information on creating an installation USB stick, and the easy step-by-step Operating Instructions.
 
 What is FT8-GO?
 ===============
