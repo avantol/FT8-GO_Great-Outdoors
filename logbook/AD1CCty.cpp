@@ -11,6 +11,7 @@
 #include <boost/lexical_cast.hpp>
 #include <QString>
 #include <QStandardPaths>
+#include <QApplication>		//avt 4/27/25
 #include <QDir>
 #include <QFile>
 #include <QTextStream>
@@ -26,6 +27,25 @@ using namespace boost::multi_index;
 namespace
 {
   auto const file_name = "cty.dat";
+  
+#if defined (Q_OS_MAC)
+  char const * app_root = "/../../../";
+#else
+  char const * app_root = "/../";
+#endif
+
+  QString ro_data_path ()		//avt 4/27/25 read-only
+  {
+#if CMAKE_BUILD
+    if (QDir::isRelativePath (CMAKE_INSTALL_DATADIR))
+      {
+	return QApplication::applicationDirPath () + app_root + CMAKE_INSTALL_DATADIR + QChar {'/'} + CMAKE_PROJECT_NAME;
+      }
+    return CMAKE_INSTALL_DATADIR;
+#else
+    return QApplication::applicationDirPath ();
+#endif
+  }
 }
 
 struct entity
@@ -309,10 +329,17 @@ char const * AD1CCty::continent (Continent c)
 
 AD1CCty::AD1CCty ()
 {
-  QDir dataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};
-  m_->path_ = dataPath.exists (file_name)
-    ? dataPath.absoluteFilePath (file_name) // user override
-    : QString {":/"} + file_name;          // or original in the resources FS
+  QDir rwDataPath {QStandardPaths::writableLocation (QStandardPaths::DataLocation)};		//avt 4/27/25 read/write for manual updating of cty.dat by user
+  QDir roDataPath {ro_data_path()};		//avt 4/27/25 read-only for default cty.dat
+  
+  if (rwDataPath.exists (file_name)) {
+    m_->path_ = rwDataPath.absoluteFilePath (file_name); // user override
+  } else if (roDataPath.exists (file_name)) {
+    m_->path_ = roDataPath.absoluteFilePath (file_name); //as installed
+  } else {
+    m_->path_ = QString {":/"} + file_name;            // or original in the resources FS
+  }
+
   QFile file {m_->path_};
   if (file.open (QFile::ReadOnly))
     {

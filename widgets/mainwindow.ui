@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>805</width>
+    <width>846</width>
     <height>718</height>
    </rect>
   </property>
@@ -506,7 +506,7 @@ padding: 3px;
        <widget class="QPushButton" name="listenButton">
         <property name="minimumSize">
          <size>
-          <width>50</width>
+          <width>75</width>
           <height>0</height>
          </size>
         </property>
@@ -543,7 +543,7 @@ padding: 3px;
        <widget class="QPushButton" name="cqButton">
         <property name="minimumSize">
          <size>
-          <width>50</width>
+          <width>70</width>
           <height>0</height>
          </size>
         </property>
@@ -1765,7 +1765,7 @@ separated by spaces
                 <enum>QTabWidget::Triangular</enum>
                </property>
                <property name="currentIndex">
-                <number>0</number>
+                <number>2</number>
                </property>
                <widget class="QWidget" name="tab">
                 <attribute name="title">
@@ -2392,17 +2392,7 @@ separated by spaces
                    <property name="horizontalSpacing">
                     <number>4</number>
                    </property>
-                   <item row="2" column="0">
-                    <widget class="QCheckBox" name="cbAddOther">
-                     <property name="toolTip">
-                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;New calls of any type (CQ, grid, report, roger-report, RRR, 73, or RR73) can be added to the call queue for a QSO.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-                     </property>
-                     <property name="text">
-                      <string>Add any type new calls</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="5" column="0">
+                   <item row="6" column="0">
                     <widget class="QCheckBox" name="cbReplyTo73">
                      <property name="toolTip">
                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;You can choose to not reply to a '73' message at the end of a successful QSO, since most operators don't require or expect it.&lt;/p&gt;&lt;p&gt;If a caller does need a response to their '73', you can do it manually by double-clicking on the '73' call.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
@@ -2412,43 +2402,7 @@ separated by spaces
                      </property>
                     </widget>
                    </item>
-                   <item row="9" column="0">
-                    <widget class="QSpinBox" name="sbLateTx">
-                     <property name="alignment">
-                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                     </property>
-                     <property name="suffix">
-                      <string> mSec</string>
-                     </property>
-                     <property name="prefix">
-                      <string>Late Tx </string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="10" column="0">
-                    <widget class="QSpinBox" name="sbShortTx">
-                     <property name="alignment">
-                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                     </property>
-                     <property name="suffix">
-                      <string> mSec</string>
-                     </property>
-                     <property name="prefix">
-                      <string>Short Tx </string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="4" column="0">
-                    <widget class="QCheckBox" name="cbReplyToRR73">
-                     <property name="toolTip">
-                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;You can choose if you want to reply to an 'RR73' message at the end of a successful QSO. Most callers do not require or expect a response to their 'RR73', since it's defined as 'Thanks and out'.&lt;/p&gt;&lt;p&gt;If a caller wants a reply to their 'RR73', you can do it manually by double-clicking on their 'RR73'.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-                     </property>
-                     <property name="text">
-                      <string>Reply to RR73 at QSO end</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="7" column="0">
+                   <item row="8" column="0">
                     <widget class="QSpinBox" name="sbMaxQueue">
                      <property name="alignment">
                       <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -2458,23 +2412,26 @@ separated by spaces
                      </property>
                     </widget>
                    </item>
-                   <item row="6" column="0">
-                    <widget class="QCheckBox" name="cbLogEarly">
+                   <item row="5" column="0">
+                    <widget class="QCheckBox" name="cbReplyToRR73">
                      <property name="toolTip">
-                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Many operators consider that a QSO is complete when signal reports (or Field Day station/section) have been exchanged . You can choose to log the call at that point, as you send an 'RRR' message.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;You can choose if you want to reply to an 'RR73' message at the end of a successful QSO. Most callers do not require or expect a response to their 'RR73', since it's defined as 'Thanks and out'.&lt;/p&gt;&lt;p&gt;If a caller wants a reply to their 'RR73', you can do it manually by double-clicking on their 'RR73'.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                      </property>
                      <property name="text">
-                      <string>Log QSO early at send 'RRR'</string>
+                      <string>Reply to RR73 at QSO end</string>
                      </property>
                     </widget>
                    </item>
-                   <item row="3" column="0">
-                    <widget class="QCheckBox" name="cbAdd73orRR73">
-                     <property name="toolTip">
-                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;New '73' or 'RR73' calls will be added to the call queue for a QSO. &lt;/p&gt;&lt;p&gt;Note: When this option is not selected, only 'CQ' calls will be added to the call queue.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                   <item row="11" column="0">
+                    <widget class="QSpinBox" name="sbShortTx">
+                     <property name="alignment">
+                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
                      </property>
-                     <property name="text">
-                      <string>Add 73 and RR73 new calls</string>
+                     <property name="suffix">
+                      <string> mSec</string>
+                     </property>
+                     <property name="prefix">
+                      <string>Short Tx </string>
                      </property>
                     </widget>
                    </item>
@@ -2488,17 +2445,7 @@ separated by spaces
                      </property>
                     </widget>
                    </item>
-                   <item row="8" column="0">
-                    <widget class="QSpinBox" name="sbMaxFail">
-                     <property name="alignment">
-                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                     </property>
-                     <property name="prefix">
-                      <string>Max QSO fails  </string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="11" column="0">
+                   <item row="12" column="0">
                     <widget class="QSpinBox" name="sbMaxAge">
                      <property name="alignment">
                       <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -2518,6 +2465,69 @@ separated by spaces
                      </property>
                      <property name="text">
                       <string>Lock selected Tx period</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="0">
+                    <widget class="QCheckBox" name="cbAddOther">
+                     <property name="toolTip">
+                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;New calls of any type (CQ, grid, report, roger-report, RRR, 73, or RR73) can be added to the call queue for a QSO.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                     </property>
+                     <property name="text">
+                      <string>Add any type new calls</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="10" column="0">
+                    <widget class="QSpinBox" name="sbLateTx">
+                     <property name="alignment">
+                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                     </property>
+                     <property name="suffix">
+                      <string> mSec</string>
+                     </property>
+                     <property name="prefix">
+                      <string>Late Tx </string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="7" column="0">
+                    <widget class="QCheckBox" name="cbLogEarly">
+                     <property name="toolTip">
+                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Many operators consider that a QSO is complete when signal reports (or Field Day station/section) have been exchanged . You can choose to log the call at that point, as you send an 'RRR' message.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                     </property>
+                     <property name="text">
+                      <string>Log QSO early at send 'RRR'</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="4" column="0">
+                    <widget class="QCheckBox" name="cbAdd73orRR73">
+                     <property name="toolTip">
+                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;New '73' or 'RR73' calls will be added to the call queue for a QSO. &lt;/p&gt;&lt;p&gt;Note: When this option is not selected, only 'CQ' calls will be added to the call queue.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                     </property>
+                     <property name="text">
+                      <string>Add 73 and RR73 new calls</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="9" column="0">
+                    <widget class="QSpinBox" name="sbMaxFail">
+                     <property name="alignment">
+                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                     </property>
+                     <property name="prefix">
+                      <string>Max QSO fails  </string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="2" column="0">
+                    <widget class="QCheckBox" name="cbAddNoQsl">
+                     <property name="toolTip">
+                      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;When downloading LOTW QSOs: Add worked-before calls that have not QSL'd yet'&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                     </property>
+                     <property name="text">
+                      <string>Add never-QSL'd calls</string>
                      </property>
                     </widget>
                    </item>
@@ -2813,8 +2823,8 @@ separated by spaces
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>805</width>
-     <height>23</height>
+     <width>846</width>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">

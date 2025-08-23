@@ -103,6 +103,9 @@ int main(int argc, char *argv[])
   // Multiple instances communicate with jt9 via this
   QSharedMemory mem_jt9;
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)                     //for Linux Lite 3.4 build only - avt 7/12/25
+  QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);      //avt 6/14/25
+#endif
   ExceptionCatchingApplication a(argc, argv);
   try
     {

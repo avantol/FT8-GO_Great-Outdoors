@@ -23,6 +23,9 @@
 #include <QFutureWatcher>
 #include <QStack>       //avt 11/29/19
 #include <QSound>       //avt 12/10/19
+#include <QSaveFile>
+#include <QUrl>
+#include <QNetworkReply>
 
 #include "AudioDevice.hpp"
 #include "commons.h"
@@ -67,11 +70,14 @@
 #define POTA_LOG_FNAME "pota.txt"           //avt 3/27/25
 #define INCR_LOG_FNAME "lotw.adi"           //avt 3/31/25
 #define INCR_LOG_TMP_FNAME "lotw.adi.tmp"   //avt 3/31/25
-#define COPY_LOG_SCRIPT "copy_log.sh"       //avt 4/4/25
+#define TEMP_LOG_FNAME "lotwreport.adi"     //avt 6/3/25
 #define FULL_LOG_FNAME "wsjtx_log.adi"      //avt 4/4/25
+#define FULL_LOG_TMP_FNAME "wsjtx_log.adi.tmp"
 #define INCR_POTA_FNAME "pota.adi"          //avt 4/24/25
 #define CONF_CALL_FNAME "conf_call.txt"
 #define DEBUG_LOG_FNAME "debug.txt"
+#define ADD_NON_QSL_CALLS
+#define TEMP_LOG_QSL_FNAME "lotwreport_qsl.adi"
 
 extern int volatile itone[NUM_ISCAT_SYMBOLS];   //Audio tones for all Tx symbols
 extern int volatile icw[NUM_CW_SYMBOLS];	    //Dits for CW ID
@@ -346,6 +352,8 @@ private slots:
   void checkMSK144ContestType();
   int  setTxMsg(int n);
   bool stdCall(QString const& w);
+  void downloadQsoComplete(bool result);
+  void downloadQslComplete(bool result);
 
 private:
   Q_SIGNAL void initializeAudioOutputStream (QAudioDeviceInfo,
@@ -370,6 +378,7 @@ private:
                              int TRperiod=60) const;
   Q_SIGNAL void outAttenuationChanged (qreal) const;
   Q_SIGNAL void toggleShorthand () const;
+  Q_SIGNAL void download_finished (bool) const;
 
 private:
   void astroUpdate ();
@@ -405,7 +414,6 @@ private:
   void setAutoState (bool checked); //avt 3/9/25
   QList<DecodedText> splitFhMsg(QString msg_str);  //avt 3/18/25
   DecodedText decodeInSequence(DecodedText decodedText);    //avt 4/18/25
-  void createCopyLogScript();   //avt 4/4/25
   void cleanupAdiBackupFiles();   //avt 4/4/25
   bool isAcceptableTxStartTime();
   bool isContest();   //avt 4/24/25
@@ -414,9 +422,14 @@ private:
   bool canAdd73orRR73();    //avt 5/3/25
   bool canAddOtherMsg(DecodedText);    //avt 5/3/25
   void updateAddSkipButtons();    //avt 5/3/25
+  void download (QUrl);
+  void reply_finished (QPointer<QNetworkReply>);
+  void download_store (QPointer<QNetworkReply>);
+  void download_abort (QPointer<QNetworkReply>);
+  void load_finished (bool);
   void updateAutoButton();
   void updateAdd73orRR73();
-  void updateTxPeriodLock();
+  void updateTxPeriodLock(bool);
   void clearAllCallInfo();
   void updateConfStart();
   void pendingCallAppend(DecodedText);
@@ -433,6 +446,7 @@ private:
   QSettings * m_settings;
   QScopedPointer<Ui::MainWindow> ui;
 
+  bool m_logbookRead;   //avt 8/8/25
   LogBook m_logBook;            // must be before Configuration construction
   Configuration m_config;
   WSPRBandHopping m_WSPR_band_hopping;
@@ -488,6 +502,7 @@ private:
   qint32  m_waterfallAvg;
   qint32  m_ntx;
   bool m_gen_message_is_cq;
+  bool debugLog;      //avt 8/12/25
   bool m_send_RR73;
   bool m_skipGrid;                //avt 2/12/19
   bool m_rndCqFreq;    //avt 2/14/19
@@ -609,14 +624,19 @@ private:
   QDateTime m_txStartDt;    //avt 3/6/25
   QString m_callInProg;     //avt 2/6/25
   bool    m_newAutoQso;     //avt 3/11/25
-  bool    m_logbookRead;   //avt 3/18/25
   bool    m_alertSounded;   //avt 3/18/25
   bool    m_addCallSounded;    //avt 4/4/25
-  bool    m_setupStable;    //avt 3/27/25
   int     m_prefTxLimit;    //avt 4/3/25
   int     m_incrLogCount;   //avt 4/4/25
   QString m_lastDecodeDisp;   //avt 4/17/25
   bool    m_confReplied;
+  bool    dlQsoReqReply;
+  bool    dlQslReqReply;
+  
+  QSaveFile sav_file;
+  bool url_valid;
+  QUrl current_url;            // may be a redirect
+  int redirect_count;
 
   enum
     {
@@ -665,7 +685,6 @@ private:
   QProcess p1;
   QProcess p3;
   QProcess *upLotw;    //avt 4/1/25
-  QProcess *dnLotw;    //avt 4/1/25
 
   WSPRNet *wsprNet;
 
@@ -773,6 +792,7 @@ private:
   void testDecodedText();     //avt 4/8/25
   bool isCorrectPeriod(DecodedText);
   bool isDecodeFromLastPeriod(DecodedText);
+  void downloadQslOnly();
   void createStatusBar();
   void updateStatusBar();
   void genStdMsgs(QString rpt, bool unconditional = false);
@@ -828,7 +848,6 @@ private:
   void subProcessFailed (QProcess *, int exit_code, QProcess::ExitStatus);
   void subProcessError (QProcess *, QProcess::ProcessError);
   void uploadLotwFinished(int, QProcess::ExitStatus);      //avt 4/1/25
-  void downloadLotwFinished(int, QProcess::ExitStatus);      //avt 4/1/25
   void replyCallTimeout();
   void lotwError (QProcess *, QProcess::ProcessError);
   void statusUpdate () const;

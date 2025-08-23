@@ -78,6 +78,7 @@ public:
   }
 };
 
+#if QT_VERSION < QT_VERSION_CHECK (5, 14, 0)        //avt 5/21/25 see: https://wsjtx.groups.io/g/main/topic/compiling_for_arm64_issue/72976156
 namespace std
 {
   // std::hash<> specialization for QString based on the dbj2
@@ -97,6 +98,7 @@ namespace std
     }
   };
 }
+#endif
 
 // Register some useful Qt types with QMetaType
 Q_DECLARE_METATYPE (QHostAddress);

@@ -98,7 +98,7 @@ DecodedText::DecodedText (QString const& the_string, Configuration::SpecialOpera
             //WM8Q K1JT RRR
             //WM8Q K1JT RR73
             //WM8Q K1JT EM45 
-            //WM8W K1JT +10 
+            //WM8Q K1JT +10 
             //CQ   WM8Q DN61
             //CQ   DX   WM8Q
             //CQ   DX   WM8Q DN61
@@ -106,7 +106,7 @@ DecodedText::DecodedText (QString const& the_string, Configuration::SpecialOpera
             if (words_.size() >= 3) {
               if (!words_[1].contains(QRegExp("[0-9]"))) {   //2nd word alpha only
                 deCall_ = words_[2];
-                if (words_[1].size() >= 2 and words_[1].size() <= 4) dirTo_ = words_[1];
+                if (words_[1].size() >= 2 and words_[1].size() <= 4 and words_[1] != "CQ") dirTo_ = words_[1];
                 if (words_.size() == 4) msgData_ = words_[3];
               } else {  //2nd word has a number
                 msgData_ = words_[2];
@@ -117,33 +117,37 @@ DecodedText::DecodedText (QString const& the_string, Configuration::SpecialOpera
             if (msgData_.contains(QRegExp("[0-9]")) and (msgData_.contains("R+") or msgData_.contains("R-"))) rogerReport_ = msgData_;
             if (msgData_.contains(grid_regexp)) grid_ = msgData_;
         
-            valid_ = (toCall_ == "CQ" or toCall_.contains(QRegExp("[0-9]")))
-              and deCall_.contains(QRegExp("[0-9]"))
+            valid_ = (toCall_ == "CQ" or (toCall_.contains(QRegExp("[0-9]")) and toCall_.contains(QRegExp("[A-Z]"))))  //avt 8/12/25
+              and (deCall_.contains(QRegExp("[0-9]")) and deCall_.contains(QRegExp("[A-Z]")))  //avt 8/12/25
               and dirTo_ != "FD"
-              and ((toCall_ == "CQ" and words_.size() == 2)
+              and ((toCall_ == "CQ" and (words_.size() == 2 or (!dirTo_.isEmpty() and words_.size() >= 3)))
                   or !report_.isEmpty()
                   or !rogerReport_.isEmpty()
                   or !grid_.isEmpty()
+                  or (grid_.isEmpty() and words_.size() == 2)   //avt 7/12/25
                   or msgData_ == "RRR"
                   or msgData_ == "73"
                   or msgData_ == "RR73");
               
           } else if (specOp == Configuration::SpecialOperatingActivity::FIELD_DAY) {
             //CQ   FD   WM8Q DN61
-            //WM8Q K1JT RRR
+            //CQ   FD   WM8Q
             //WM8Q K1JT RR73
+            //WM8Q K1JT 73
             //WM8Q K1JT 2B   WY
             //K1JT WM8Q R    2B  WY
             // 0     1  2     3   4
     
-            if (words_.size() == 3 and (words_[2] == "73" or words_[2] == "RR73" or words_[2] == "RRR")) msgData_ = words_[2];
-            if (words_.size() == 4 and words_[0] == "CQ" and words_[1] == "FD") {
-              msgData_ = words_[3];
-              if (msgData_.contains(grid_regexp)) grid_ = msgData_;
+            if (words_.size() == 3 and (words_[2] == "73" or words_[2] == "RR73")) msgData_ = words_[2];
+            if ((words_.size() == 3 or words_.size() == 4) and words_[0] == "CQ" and words_[1] == "FD") {  //avt 7/12/25
+              if (words_.size() == 4) {  //avt 7/12/25
+                msgData_ = words_[3];
+                if (msgData_.contains(grid_regexp)) grid_ = msgData_;
+              }
               deCall_ = words_[2];
               dirTo_ = words_[1];
             }
-            if (words_.size() >= 4) {
+            if (words_.size() == 4 or words_.size() == 5) { //avt 7/12/25
               if (words_[2] == "R" and words_.size() == 5) {
                 msgData_ = words_[3] + " " +  words_[4];
                 if (msgData_.contains(field_day_exchange_re)) {
@@ -159,12 +163,12 @@ DecodedText::DecodedText (QString const& the_string, Configuration::SpecialOpera
               }
             }
             
-            valid_ = (toCall_ == "CQ" or toCall_.contains(QRegExp("[0-9]")))
-              and deCall_.contains(QRegExp("[0-9]"))
+            valid_ = (toCall_ == "CQ" or (toCall_.contains(QRegExp("[0-9]")) and toCall_.contains(QRegExp("[A-Z]"))))  //avt 8/12/25
+              and (deCall_.contains(QRegExp("[0-9]")) and deCall_.contains(QRegExp("[A-Z]")))  //avt 8/12/25
               and (!exch_.isEmpty()
                   or !rogerExch_.isEmpty()
-                  or !grid_.isEmpty()
-                  or msgData_ == "RRR"
+                  or (toCall_ == "CQ" and !grid_.isEmpty())
+                  or (toCall_ == "CQ" and grid_.isEmpty() and words_.size() == 3)   //avt 7/12/25
                   or msgData_ == "73"
                   or msgData_ == "RR73");                
           }

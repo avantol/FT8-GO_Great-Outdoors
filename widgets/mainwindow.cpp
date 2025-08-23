@@ -168,8 +168,6 @@ extern "C" {
 #define DUMMY_RIG_LOW 600
 #define DUMMY_RIG_HIGH 1900		//avt 8/1/22
 
-bool debugLog = true;   //avt 2/27/25
-
 int volatile itone[NUM_ISCAT_SYMBOLS];   //Audio tones for all Tx symbols
 int volatile itone0[NUM_ISCAT_SYMBOLS];  //Dummy array, data not actually used
 int volatile icw[NUM_CW_SYMBOLS];        //Dits for CW ID
@@ -233,6 +231,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_configurations_button {0},
   m_settings {multi_settings->settings ()},
   ui(new Ui::MainWindow),
+  m_logbookRead {true},     //assume no wsjt_log.adi 
   m_logBook {&m_config},
   m_config {&m_network_manager, temp_directory, m_settings, &m_logBook, this},
   m_WSPR_band_hopping {m_settings, &m_config, this},
@@ -262,6 +261,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_waterfallAvg {1},
   m_ntx {1},
   m_gen_message_is_cq {false},
+  debugLog {false},       //avt 8/12/25
   m_send_RR73 {false},    //avt 8/21/22
   m_skipGrid {false},     //avt 8/21/22
   m_rndCqFreq {false},    //avt 8/21/22
@@ -340,19 +340,19 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_bLastDecodeIsCQ {false},    //avt 2/23/19 determines when to hop freq
   m_dupTxCount {0},     //avt 8/20/22
   m_cleanup {false},         ///avt 2/28/25
-  m_supportedAutoModes {"FT8 JT65"},    //avt 3/1/25
+  m_supportedAutoModes {"FT8 JT65"},
   m_enableSound {false},     //avt 3/3/25
   m_txStartDt {QDateTime::currentDateTimeUtc()},  //avt 3/6/25
   m_callInProg {""},    //avt 3/6/25
   m_newAutoQso {false}, //avt 3/11/25 determines when to hop freq
-  m_logbookRead {false},    //avt 3/18/25
   m_alertSounded {false},    //avt 3/18/25
   m_addCallSounded {false},    //avt 4/4/25
-  m_setupStable {false},    //avt 3/27/25 ignore spurious events during startup
   m_prefTxLimit {DEF_MAX_TX_REPEAT},  //avt 4/3/25
   m_incrLogCount {0},     //avt 4/4/25
   m_lastDecodeDisp {},  //avt 4/17/25
-  m_confReplied (),
+  m_confReplied {false},
+  dlQsoReqReply {false},
+  dlQslReqReply {false},
   m_QSOProgress {CALLING},
   m_ihsym {0},
   m_nzap {0},
@@ -420,26 +420,6 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
       "Z2", "Z3", "ZA", "ZB", "ZC4", "ZD7", "ZD8", "ZD9", "ZF", "ZK1N",
       "ZK1S", "ZK2", "ZK3", "ZL", "ZL7", "ZL8", "ZL9", "ZP", "ZS", "ZS8"
       },
-  m_copy_log {
-    "#!/bin/sh",
-    "",
-    "# v1",
-    "cd $3",
-    "rm -f lotwreport.adi",
-    "rm -f cmd_status.txt",
-    "if wget -O lotwreport.adi \"https://lotw.arrl.org/lotwuser/lotwreport.adi?login=$1&password=$2&qso_query=1&qso_qsorxsince=1970-01-01&qso_qsl=no\"; then",
-    "  if test -f wsjtx_log.adi; then",
-    "    TMPFILE=$(mktemp -q XXXXXXXXXX_wsjtx_log.adi)",
-    "    cp -f wsjtx_log.adi \"$TMPFILE\"",
-    "  fi",
-    "  mv -f lotwreport.adi wsjtx_log.adi",
-    "  echo 0 > cmd_status.txt",
-    "  exit 0",
-    "else",
-    "  echo 1 > cmd_status.txt",
-    "  exit 1",
-    "fi"
-  },
   m_sfx {"P",  "0",  "1",  "2",  "3",  "4",  "5",  "6",  "7",  "8",  "9",  "A"},
   mem_jt9 {shdmem},
   m_msAudioOutputBuffered (0u),
@@ -547,21 +527,6 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   // setup the log QSO dialog
   connect (m_logDlg.data (), &LogQSO::acceptQSO, this, &MainWindow::acceptQSO);
   connect (this, &MainWindow::finished, m_logDlg.data (), &LogQSO::close);
-
-  // hook up the log book
-  connect (&m_logBook, &LogBook::finished_loading, [this] (int record_count, QString const& error) {
-      m_logbookRead = true;
-      debugToFile("finished_ m_logbookRead:true");
-      updateModeCtrls();
-      if (error.size ())
-        {
-          MessageBox::warning_message (this, tr ("Error Scanning ADIF Log"), error);
-        }
-      else
-        {
-          showStatusMessage (tr ("Scanned ADIF log, %1 QSO records read").arg (record_count));
-        }
-    });
 
   // Network message handlers
   connect (m_messageClient, &MessageClient::reply, this, &MainWindow::replyToCQ);
@@ -683,6 +648,21 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (ui->decodedTextBrowser, &DisplayText::erased, this, &MainWindow::band_activity_cleared);
   connect (ui->decodedTextBrowser2, &DisplayText::erased, this, &MainWindow::rx_frequency_activity_cleared);
 
+  // hook up the log book
+  connect (&m_logBook, &LogBook::finished_loading, [this] (int record_count, QString const& error) {
+      m_logbookRead = true;
+      debugToFile("finished_ m_logbookRead:true");
+      updateModeCtrls();
+      if (error.size ())
+        {
+          MessageBox::warning_message (this, tr ("Error Scanning ADIF Log"), error);
+        }
+      else
+        {
+          showStatusMessage (tr ("Scanned ADIF log, %1 QSO records read").arg (record_count));
+        }
+    });
+  
   // initialize decoded text font and hook up font change signals
   // defer initialization until after construction otherwise menu
   // fonts do not get set
@@ -1026,7 +1006,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
   connect (&splashTimer, &QTimer::timeout, this, &MainWindow::splash_done);
   splashTimer.setSingleShot (true);
-  splashTimer.start (3 * 1000);     //avt 3/27/25
+  splashTimer.start (8 * 1000);     //avt 3/27/25
 
   //avt 10/13/22
   connect (&cleanupTimer, &QTimer::timeout, this, &MainWindow::flagCleanup);
@@ -1041,21 +1021,33 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
     ui->cbMenus->setChecked(false);
   }
   
-  debugToFile(QString{"data_dir:'%1' writeable_data_dir:'%2'"}.arg(m_config.data_dir().absolutePath()).arg(m_config.writeable_data_dir().absolutePath()));
+  //never used
+  ui->sbLateTx->setVisible(false);
+  ui->sbShortTx->setVisible(false);
+  ui->sbMaxQueue->setVisible(false);
+  ui->sbMaxFail->setVisible(false);
+  ui->sbMaxAge->setVisible(false);
+  ui->cbAutoRestartCq->setVisible(false);
+  ui->cbAutoListen->setVisible(false);
+  
+  //testing# included:
+  debugToFile(QString{"24        data_dir:'%1' writeable_data_dir:'%2'"}.arg(m_config.data_dir().absolutePath()).arg(m_config.writeable_data_dir().absolutePath()));
+  debugToFile("          sslLibVer:" + QSslSocket::sslLibraryVersionString() + " sslLibBuild:" + QSslSocket::sslLibraryBuildVersionString()); 
   m_enableSound = !m_config.is_dummy_rig();
   
   readPotaCalls();    //avt 8/30/22
   setIncrLogCount();    //avt 4/6/25
   
   ui->bandComboBox->setEnabled(false); //avt 3/27/25
+  updateAdd73orRR73();
   
-  createCopyLogScript();      //avt 4/4/25
-  
-  dnLotw = nullptr;
+  m_logbookRead = !QFile::exists(m_config.writeable_data_dir ().absoluteFilePath (FULL_LOG_FNAME));   //if it exists, log book being read now
+  updateModeCtrls();
+
   upLotw = nullptr;
   
   //testDecodedText();
-     
+  
 // this must be the last statement of constructor
   if (!m_valid) throw std::runtime_error {"Fatal initialization exception"};
 }
@@ -1068,8 +1060,7 @@ void MainWindow::initialize_fonts ()
 
 void MainWindow::splash_done ()
 {
-  m_setupStable = true;   //avt 3/27/25
-  debugToFile("splash_do m_setupStable:true");
+  debugToFile("splash_do m_currentBand:'" + m_currentBand);
   updateModeCtrls();      //avt 9/10/22
   readConfCalls(m_currentBand);
   ui->bandComboBox->setEnabled(true); //avt 3/27/25
@@ -1442,6 +1433,7 @@ bool MainWindow::readPotaCalls ()
     
     if (dateStr != QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd")) {      //day shift goes to night shift at 00:00:00 UTC
       debugToFile("readPotaC new day, m_loggedPotaCalls:" + setToString(m_loggedPotaCalls));
+      f.close();      //avt 6/9/25
       return writePotaCalls();
     }
     
@@ -1494,6 +1486,10 @@ bool MainWindow::writePotaCalls ()
 
 bool MainWindow::readQsoFails () 
 {
+  debugToFile("readQsoFa m_currentBand:'" + m_currentBand + "'");      //avt 3/27/25
+
+  if (!m_currentBand.size()) return false;
+
   m_failMap.clear();
   debugToFile("readQsoFa m_currentBand:'" + m_currentBand + "'");      //avt 3/27/25
   
@@ -1507,15 +1503,20 @@ bool MainWindow::readQsoFails ()
     QTextStream in(&f);
     //first line: "2025-03-27 10m"
     auto idParts = in.readLine(0).split(' ', QString::SkipEmptyParts);      //avt 3/27/25
-    if (idParts.size() < 2) return writeQsoFails();   //avt 3/27/25 old format
+    if (idParts.size() < 2) {
+      f.close();
+      return writeQsoFails();   //avt 3/27/25 old format
+    }
     
     if (idParts[1] != m_currentBand) {      //avt 3/27/25
       debugToFile("readQsoFa different band, m_failMap:" + failMapToString(m_failMap));
+      f.close();
       return writeQsoFails();
     }
     
     if (idParts[0] != QDateTime::currentDateTime().toString("yyyy-MM-dd")) {
       debugToFile("readQsoFa new day, m_failMap:" + failMapToString(m_failMap));
+      f.close();
       return writeQsoFails();
     }
     
@@ -1714,22 +1715,24 @@ void MainWindow::updateModeCtrls()
   debugToFile("updateMod isAutoCqMode():" + boolToString(isAutoCqMode()) + " isAutoListenMode():" + boolToString(isAutoListenMode()));
 
   QString callType;
-  if (ui->cbAddOther->isChecked()) {
+  //avt 8/10/25
+  //can be called when UI currently blocked and control visibility not in effect yet 
+  if ((m_supportedAutoModes.contains(m_mode) or ui->cbAddOther->isVisible()) and ui->cbAddOther->isChecked()) {
     callType = "new";
-  } else if (canAdd73orRR73()) {
+  } else if ((m_supportedAutoModes.contains(m_mode) or ui->cbAdd73orRR73->isVisible()) and ui->cbAdd73orRR73->isChecked()) {
     callType = "CQ/73";
   } else {
     callType = "CQ";
   }
     
-  ui->menuConfig->setEnabled(m_logbookRead and upLotw == nullptr and dnLotw == nullptr);
-  
-  ui->cbFirst->setChecked(true);
-  ui->cbAutoSeq->setChecked(true);
+  ui->menuConfig->setEnabled(m_logbookRead and upLotw == nullptr);
+  ui->cbAddNoQsl->setEnabled(m_logbookRead);
     
   if (isAnyAutoMode()) {
     ui->cbFirst->setEnabled(false);
+    ui->cbFirst->setChecked(true);
     ui->cbAutoSeq->setEnabled(false);
+    ui->cbAutoSeq->setChecked(true);
     if (!m_logbookRead) {  //avt 3/18/25
       last_tx_label.setText("Waiting for logbook...");        
     } else {
@@ -1819,11 +1822,13 @@ void MainWindow::post_log(QString call)
   if (m_exchsRecd.remove(call)) debugToFile("post_log  remove " + call + " from m_exchsRecd:" + mapToString(m_exchsRecd));
   if (m_exchsSent.remove(call)) debugToFile("post_log  remove " + call + " from m_exchsSent:" + mapToString(m_exchsSent));
 
-  setCallInProg("");
-  m_dupTxCount = 0;
-  m_msgAtStartTx = "";
-  m_msgAtEndTx = "";
-  debugToFile("post_log  m_callInProg:'" + m_callInProg +"'" + " m_dupTxCount:0, m_msgAtStartTx:''");
+  if (call ==  m_callInProg) {    //avt 7/12/25 not out-of-sequence call
+    setCallInProg("");
+    m_dupTxCount = 0;
+    m_msgAtStartTx = "";
+    m_msgAtEndTx = "";
+    debugToFile("post_log  m_callInProg:'" + m_callInProg +"'" + " m_dupTxCount:0, m_msgAtStartTx:''");
+  }
   
   showQueue();
 }
@@ -1967,6 +1972,7 @@ void MainWindow::writeSettings()
   m_settings->setValue ("DirectedEnable", ui->cbAlertDirected->isChecked());      //avt 3/12/20
   m_settings->setValue ("DxCqEnable", ui->cbAlertDxCq->isChecked());      //avt 12/31/19
   m_settings->setValue ("LocalCqEnable", ui->cbAlertLocalCq->isChecked());      //avt 2/24/25
+  m_settings->setValue ("AddNoQsl", ui->cbAddNoQsl->isChecked());      //avt 6/14/25
   m_settings->setValue ("AutoQsoTimeout", m_prefTxLimit);      //avt 3/26/25
   m_settings->setValue ("Add73orRR73", ui->cbAdd73orRR73->isChecked());
   m_settings->setValue ("AddOther", ui->cbAddOther->isChecked());
@@ -1975,6 +1981,7 @@ void MainWindow::writeSettings()
   m_settings->setValue ("ConfStart", ui->cbConfStart->isChecked());
   m_settings->setValue ("LockPeriod", ui->cbLockPeriod->isChecked());
   m_settings->setValue ("LogEarly", ui->cbLogEarly->isChecked());
+  m_settings->setValue ("debugLog", debugLog);    //avt 8/12/25
   m_settings->setValue ("WSPRPreferType1", ui->WSPR_prefer_type_1_check_box->isChecked ());
   m_settings->setValue("UploadSpots",m_uploadSpots);
   m_settings->setValue("NoOwnCall",ui->cbNoOwnCall->isChecked());
@@ -2083,27 +2090,28 @@ void MainWindow::readSettings()
   ui->cbAlertLocalCq->setChecked(m_settings->value("LocalCqEnable",false).toBool());      //avt 2/24/25
   ui->alertEntry->setText (m_settings->value ("DirectedAlert", QString {}).toString ());  //avt
   ui->cbAlertDirected->setChecked(m_settings->value("DirectedEnable",false).toBool());   //avt 3/12/20
+  ui->cbAddNoQsl->setChecked(m_settings->value("AddNoQsl",false).toBool());   //avt 6/14/25
   m_prefTxLimit = m_settings->value("AutoQsoTimeout").toInt();
   if (!m_prefTxLimit) m_prefTxLimit = DEF_MAX_TX_REPEAT;
   ui->sbTxRepeat->setRange(1, 8);      //avt 3/26/25
   ui->sbTxRepeat->setValue(m_prefTxLimit);      //avt 3/26/25
-  updateModeCtrls();
 
   m_prevCqFreq = 0;     //avt 11/21/19
   m_msgSent0 = "";      //avt 8/16/22
   
   ui->cbAdd73orRR73->setChecked(m_settings->value("Add73orRR73",true).toBool());
   ui->cbAddOther->setChecked(m_settings->value("AddOther",false).toBool());
-  updateAdd73orRR73();
   
   ui->cbConfStart->setChecked(m_settings->value("ConfStart",false).toBool());
   ui->cbLockPeriod->setChecked(m_settings->value("LockPeriod",false).toBool());
-  updateTxPeriodLock();
+  updateTxPeriodLock(false);
   
   ui->cbReplyToRR73->setChecked(m_settings->value("ReplyToRR73",false).toBool());
   ui->cbReplyTo73->setChecked(m_settings->value("ReplyTo73",false).toBool());
   ui->cbLogEarly->setChecked(m_settings->value("LogEarly",true).toBool());
   
+  debugLog = m_settings->value("debugLog",false).toBool();   //avt 8/12/25
+
   ui->WSPR_prefer_type_1_check_box->setChecked (m_settings->value ("WSPRPreferType1", true).toBool ());
   m_uploadSpots=m_settings->value("UploadSpots",false).toBool();
   if(!m_uploadSpots) ui->cbUploadWSPR_Spots->setStyleSheet("QCheckBox{background-color: yellow}");
@@ -2947,7 +2955,7 @@ void MainWindow::keyPressEvent (QKeyEvent * e)
       if(e->modifiers() & Qt::ControlModifier) {
         ui->cbLockPeriod->setChecked(!ui->cbLockPeriod->isChecked());
         debugToFile(QString{"keyPressE tx lock:%1"}.arg(ui->cbLockPeriod->isChecked()));
-        updateTxPeriodLock();
+        updateTxPeriodLock(true);
         return;
       }
       break;
@@ -3056,6 +3064,18 @@ void MainWindow::displayDialFrequency ()
   auto const& band_name = m_config.bands ()->find (dial_frequency);
   if (m_lastBand != band_name)
     {
+      debugToFile("displayDi band_name:" + band_name + " m_lastBand:" + m_lastBand);  //avt 6/9/25
+      
+      //avt 6/10/25
+      clearAllCallInfo();
+      readConfCalls(band_name);
+      m_prevCqFreq = 0;     //avt 4/7/20
+      if (m_mode != "WSPR") {
+        ui->decodedTextBrowser2->erase ();           //avt 2/14/19
+        ui->decodedTextBrowser->erase ();           //avt 2/14/19
+        m_wideGraph->clear();           //avt 2/14/19
+      }
+
       // only change this when necessary as we get called a lot and it
       // would trash any user input to the band combo box line edit
       ui->bandComboBox->setCurrentText (band_name);
@@ -3272,7 +3292,7 @@ void MainWindow::subProcessError (QProcess * process, QProcess::ProcessError)
 
 void MainWindow::closeEvent(QCloseEvent * e)
 {
-  if (dnLotw != nullptr or upLotw != nullptr)
+  if (upLotw != nullptr)
   {
     showStatusMessage("Wait for the logbook to finish updating...");
     e->ignore();
@@ -4168,6 +4188,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
       }
       
       int msgIdx = -1;      //avt 3/28/25
+      bool msgProcessed = false;
       
       foreach (DecodedText decodedtext, decodedtexts)
       {
@@ -4285,8 +4306,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
         bool bDisplayRight=bAvgMsg;
         int audioFreq=decodedtext.frequencyOffset();
         bool is_newLogged = false;
-        bool is_hold = !ui->sbTxRepeat->value();     //avt 4/2/25
-        bool msgProcessed = false;
+        bool is_hold = ui->sbTxRepeat->isVisible() and !ui->sbTxRepeat->value();     //avt 4/2/25
 
         if (!is_reject && m_supportedAutoModes.contains(m_mode)) {   //avt 4/7/20
           if ((for_us and m_callInProg == newcall) or m_callInProg == "") is_hold = false;     //avt 4/2/25
@@ -4414,6 +4434,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
             + " is_manualAutoSeq:" + boolToString(is_manualAutoSeq)
             + " is_manual73:" + boolToString(is_manual73)
             + " is_interrupt:" + boolToString(is_interrupt)
+            + " msgProcessed:" + boolToString(msgProcessed)
           );
           debugToFile("readFromS m_auto:" + boolToString(m_auto)
             + " callFirst:" + boolToString(callFirst)
@@ -4485,7 +4506,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
                       }
                     } else {    //is an auto mode
                       if (for_us) {                      
-                        if ((is_73 and ui->cbReplyTo73->isChecked()) or (is_RR73 and ui->cbReplyToRR73->isChecked())) {
+                        if ((is_73 and ui->cbReplyTo73->isVisible() and ui->cbReplyTo73->isChecked()) or (is_RR73 and ui->cbReplyToRR73->isVisible() and ui->cbReplyToRR73->isChecked())) {
                           if (!is_hold) {       //avt 4/2/25
                             debugToFile("readFromS (2)processing " + newcall);
                             m_bDoubleClicked = true;
@@ -4497,7 +4518,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
                           }
                         } else {
                           debugToFile("readFromS (3)not processing " + newcall);
-                          tx_watchdog (true);   //next call or disable T
+                          tx_watchdog (true);   //next call or disable Tx
                         }
                       } else {  //not for us
                         debugToFile("readFromS (2)not processing " + newcall);
@@ -5351,7 +5372,7 @@ void MainWindow::startTx2()
   debugToFile("startTx2  m_msgAtStartTx:'" + m_msgAtStartTx +"'");
   debugToFile(QString{"startTx2  tMsec:%1 maxMsec:%2 replyCallTimer:%3"}.arg(tMsec).arg(maxMsec).arg(maxMsec - tMsec));
   
-  if (ui->sbTxRepeat->value()) m_prefTxLimit = ui->sbTxRepeat->value();   //save preferred repeat Tx limt
+  if (ui->sbTxRepeat->isVisible() and ui->sbTxRepeat->value()) m_prefTxLimit = ui->sbTxRepeat->value();   //save preferred repeat Tx limt
   
   if (!m_modulator->isActive ()) { // TODO - not thread safe
     double fSpread=0.0;
@@ -5383,6 +5404,7 @@ void MainWindow::startTx2()
       m_config.setSpecOpPota();
       ui->labDXped->setText("POTA");
       ui->labDXped->setVisible(true);
+      ui->freeTextMsg->setCurrentText(QString{"%1 %2"}.arg(m_config.my_callsign()).arg(m_config.park_id().remove("-")));    //avt 7/25/25
       debugToFile("startTx2  switching to specOp POTA mode");
       genCQMsg();
       showStatusMessage("Enabling 'POTA special operating activity'");
@@ -5390,6 +5412,7 @@ void MainWindow::startTx2()
       m_config.setSpecOpNone();
       ui->labDXped->clear();
       ui->labDXped->setVisible(false);
+      ui->freeTextMsg->clearEditText();       //avt 7/25/25
       debugToFile("startTx2  switching to specOp NONE mode");
       genCQMsg();
       showStatusMessage("Disabling 'POTA Special operating activity'");
@@ -5465,7 +5488,7 @@ void MainWindow::stopTx()
   debugToFile("stopTx    txMessage:'" + txMessage.trimmed() + "'");
   debugToFile("stopTx    decode is_valid:" + boolToString(decode.is_valid()));
   debugToFile("stopTx    decode message:'" + decode.message() + "'");
-  if (decode.is_valid()) {
+  if (decode.is_valid() and ui->sbTxRepeat->isVisible()) {
     //avt 10/12/22
     //accept that this msg may have been interrupted and not rec'd by caller;
     //if not, caller will try again
@@ -5514,7 +5537,7 @@ void MainWindow::stopTx()
     //m_hiscall known to be correct "from" call sign in this transmission
     //check for early auto-log when sending RRR
 
-    if (ui->cbLogEarly->isChecked()         //avt 5/5/25
+    if (ui->cbLogEarly->isVisible() and ui->cbLogEarly->isChecked()         //avt 5/5/25
         and isAnyAutoMode()
         and decode.is_rogers()
         and (m_reportsSent.contains(m_hisCall) or m_exchsSent.contains(m_hisCall))
@@ -5535,7 +5558,7 @@ void MainWindow::stopTx()
       debugToFile("stopTx    m_dupTxCount:0, m_msgAtStartTx:'' m_msgAtEndTx:''"); 
       if (isAnyAutoMode()) {
         debugToFile("stopTx    CQ, reset watchdog timer, m_dupTxCount:0");
-        tx_watchdog (false);
+        tx_watchdog (true);     //avt 7/12/25
       }
       return;
     }
@@ -5639,7 +5662,7 @@ void MainWindow::on_txFirstCheckBox_stateChanged(int nstate)        //TxFirst
   debugToFile("on_txFirs m_msgMap:");
   showQueue();
   setCallInProg("");
-  debugToFile("on_txFirs repeat Tx limit:" + intToString(ui->sbTxRepeat->value()));
+  if (ui->sbTxRepeat->isVisible()) debugToFile("on_txFirs repeat Tx limit:" + intToString(ui->sbTxRepeat->value()));
 }
 
 //avt 2/12/19
@@ -5720,6 +5743,12 @@ void MainWindow::on_cqButton_clicked()
     m_prevCqFreq = 0;     //avt 3/19/25
     m_msgAtStartTx = "";  //avt 3/19/25
     setAutoState (true);
+    
+    if (ui->sbTxRepeat->isVisible() and !ui->sbTxRepeat->value()) {             //is in hold mode
+      ui->sbTxRepeat->setValue(m_prefTxLimit);  //clear hold
+      debugToFile(QString{"on_cqButt repeat Tx limit:%1"}.arg(ui->sbTxRepeat->value()));
+    }
+    
     if (m_callInProg == "") {   //avt 3/25/25
       tx_watchdog (true);   //avt 3/22/25
     } //otherwise finish current QSO
@@ -5767,7 +5796,7 @@ void MainWindow::on_listenButton_clicked()
 void MainWindow::on_sbTxRepeat_valueChanged(int n)    //avt 4/6/25
 {
   if (!n) clearFailCount(m_callInProg);   //hold clears fail count
-  debugToFile(QString{"on_sbSeri repeat Tx limit:%1 m_callInProg:%2"}.arg(n).arg(m_callInProg));
+  debugToFile(QString{"on_sbTxRe repeat Tx limit:%1 m_callInProg:%2"}.arg(n).arg(m_callInProg));
 }
 
 void MainWindow::set_dateTimeQSO(int m_ntx)
@@ -6043,7 +6072,19 @@ void MainWindow::doubleClickOnCall(Qt::KeyboardModifiers modifiers)
         QApplication::beep();
         return;
       }
+      
+      if (m_msgMap.contains(deCall)) {
+        showStatusMessage(addCall + " is already in queue");
+        QApplication::beep();
+        return;
+      }
     
+      if (addCall == m_callInProg and m_auto and !isAutoCqMode()) {
+        showStatusMessage(addCall + " is in progress");
+        QApplication::beep();
+        return;
+      }
+      
       if (!is_correctPeriod) {    //avt 4/7/25 time period for selected message not OK
         if (ui->cbLockPeriod->isChecked()) {
           MessageBox::information_message (this, "Selected message is in the opposite Tx period and 'Tx even/1st' selection is locked");
@@ -6055,12 +6096,6 @@ void MainWindow::doubleClickOnCall(Qt::KeyboardModifiers modifiers)
           }
           ui->txFirstCheckBox->setChecked(!ui->txFirstCheckBox->isChecked());
         }
-      }
-      
-      if (addCall == m_hisCall and m_auto) {
-        showStatusMessage(addCall + " is in progress");
-        QApplication::beep();
-        return;
       }
       
       if (workedBefore(addCall, "", false)) {
@@ -6080,9 +6115,11 @@ void MainWindow::doubleClickOnCall(Qt::KeyboardModifiers modifiers)
       m_confCalls.insert(addCall);
       debugToFile("doubleCli m_confCalls:" + setToString(m_confCalls));
       return;
+    } else {
+      QApplication::beep();
+      showStatusMessage("Select 'Listen' or 'Call CQ' first");
+      return;
     }
-    QApplication::beep();
-    return;
   }
 
   //is a normal double-click, no modifier key(s), can process immediately
@@ -6703,7 +6740,7 @@ void MainWindow::processMessage (DecodedText const& msg, Qt::KeyboardModifiers m
   }
   
   if (ui->cbAutoSeq->isVisible () && ui->cbAutoSeq->isChecked () && !m_bDoubleClicked) continue;
-  if(m_config.quick_call()) {
+  if(isAnyAutoMode() or m_config.quick_call()) {   //avt 8/7/25
     debugToFile("processMe auto_tx_mode:true");
     auto_tx_mode (true);
   }
@@ -7339,7 +7376,10 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button; pos
   if (dateTimeQSOOff < m_dateTimeQSOOn) dateTimeQSOOff = m_dateTimeQSOOn;
   QString grid=m_hisGrid;
   if(grid=="....") grid="";
-  debugToFile("on_logQSO m_hisCall:" + m_hisCall + " grid:" + grid);
+  debugToFile("on_logQSO m_hisCall:" + m_hisCall + " grid:'" + grid + "' m_xSent:'" + m_xSent + "' m_xRcvd:'" + m_xRcvd + "'");
+  
+  if (m_exchsSent.contains(m_hisCall)) m_xSent = m_exchsSent.value(m_hisCall);      //avt 7/12/25
+  if (m_exchsRecd.contains(m_hisCall)) m_xRcvd = m_exchsRecd.value(m_hisCall);      //avt 7/12/25
 
   switch( m_config.special_op_id() )
     {
@@ -7391,7 +7431,7 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
   debugToFile("acceptQSO call:" + call + " grid:" + grid);
   debugToFile("acceptQSO rpt_sent:" + rpt_sent + " rpt_received:" + rpt_received + " exchange_sent:" + exchange_sent + " exchange_rcvd:" + exchange_rcvd);
   QString date = QSO_date_on.toString("yyyyMMdd");
-  if (!m_logBook.add (m_hisCall, grid, m_config.bands()->find(m_freqNominal), m_modeTx, ADIF))
+  if (!m_logBook.add (call, grid, m_config.bands()->find(m_freqNominal), m_modeTx, ADIF))   //avt 7/12/25
     {
       MessageBox::warning_message (this, tr ("Log file error"),
                                    tr ("Cannot open \"%1\"").arg (m_logBook.path ()));
@@ -7523,12 +7563,6 @@ void MainWindow::displayWidgets(qint64 n)
       ui->cbUseRR73->setVisible(b);
       ui->cbUseRR73_1->setVisible(b);
     }
-    if(i==36) {
-      ui->cqButton->setVisible(b);       //avt 4/7/20
-      ui->listenButton->setVisible(b);       //avt 3/1/25
-    }
-    //end
-
     if(i==29) ui->measure_check_box->setVisible(b);
     if(i==30) ui->labDXped->setVisible(b);
     if(i==31) ui->cbRxAll->setVisible(b);
@@ -7543,7 +7577,24 @@ void MainWindow::displayWidgets(qint64 n)
       ui->cbAlertLocalCq->setVisible(b);      //avt 2/24/25
       ui->alertEntry->setVisible(b);
       ui->cbAlertDirected->setVisible(b);       //avt 3/12/20
+      ui->cqButton->setVisible(b);
+      ui->listenButton->setVisible(b);
+      ui->cbLockPeriod->setVisible(b);
+      updateTxPeriodLock(false);
+      ui->cbAddOther->setVisible(b);
+      ui->cbAdd73orRR73->setVisible(b);
+      ui->cbReplyToRR73->setVisible(b);
+      ui->cbReplyTo73->setVisible(b);
+      ui->cbLogEarly->setVisible(b);
+      ui->sbTxRepeat->setVisible(b);
     }
+    if(i==36) {
+      ui->addCallButton->setVisible(b);
+      ui->ignoreCallButton->setVisible(b);
+      ui->cbConfStart->setVisible(b);
+    }
+    //end
+
     j=j>>1;
   }
   b=(SpecOp::EU_VHF==m_config.special_op_id() or (SpecOp::RTTY==m_config.special_op_id() and (m_config.RTTY_Exchange()=="#" or m_config.RTTY_Exchange()=="DX")));
@@ -7615,21 +7666,12 @@ void MainWindow::on_actionFT8_triggered()
   ui->addCallButton->setChecked(false);
   
   ui->cbConfStart->setEnabled(true);
-  ui->sbLateTx->setVisible(false);
-  ui->sbShortTx->setVisible(false);
-  ui->sbMaxQueue->setVisible(false);
-  ui->sbMaxFail->setVisible(false);
-  ui->sbMaxAge->setVisible(false);
-  
-  ui->cbAutoRestartCq->setVisible(false);   //not used
-  ui->cbAutoListen->setVisible(false);   //not used
   
   m_CQtype = "CQ";
   
-  updateModeCtrls();
-
   m_prevCqFreq = 0;     //avt 4/7/20
-
+  ui->freeTextMsg->clearEditText();   //avt 7/25/25
+  
   if (m_config.special_op_id () > SpecOp::NONE) {
     QString t0="";
     if(SpecOp::NA_VHF==m_config.special_op_id()) t0+="NA VHF";
@@ -7641,7 +7683,10 @@ void MainWindow::on_actionFT8_triggered()
     if(!isContest()) {
       ui->cqButton->setVisible(true);
       ui->listenButton->setVisible(true);
-      if (m_config.special_op_id() == SpecOp::POTA) m_CQtype = "CQ POTA";
+      if (m_config.special_op_id() == SpecOp::POTA) {
+        m_CQtype = "CQ POTA";
+        ui->freeTextMsg->setCurrentText(QString{"%1 %2"}.arg(m_config.my_callsign()).arg(m_config.park_id().remove("-")));    //avt 7/25/25
+      }
       if (m_config.special_op_id() == SpecOp::POTA or m_config.special_op_id() == SpecOp::FIELD_DAY) {
         ui->labDXped->setVisible(true);
         ui->labDXped->setText(t0);
@@ -7684,8 +7729,153 @@ void MainWindow::on_actionFT8_triggered()
   }
   updateAutoButton();
   updateAdd73orRR73();
+  updateModeCtrls();
   updateConfStart();
   statusChanged();
+}
+
+void MainWindow::on_actionJT65_triggered()
+{
+  if(m_mode=="JT4" or m_mode.startsWith ("WSPR")) {
+// If coming from JT4 or WSPR mode, pretend temporarily that we're coming
+// from JT9 and click the pbTxMode button
+    m_modeTx="JT9";
+    on_pbTxMode_clicked();
+  }
+  bool bAuto = ui->cbAutoSeq->isChecked();   //avt 5/6/19
+  bool bCallFirst = ui->cbFirst->isChecked();   //avt 5/6/19
+  on_actionJT9_triggered();
+  m_mode="JT65";
+  m_modeTx="JT65";
+  bool bVHF=m_config.enable_VHF_features();
+  WSPR_config(false);
+  switch_mode (Modes::JT65);
+  if(m_modeTx!="JT65") on_pbTxMode_clicked();
+  m_TRperiod=60;
+  m_modulator->setTRPeriod(m_TRperiod); // TODO - not thread safe
+  m_detector->setTRPeriod(m_TRperiod);   // TODO - not thread safe
+  m_nsps=6912;                   //For symspec only
+  m_FFTSize = m_nsps / 2;
+  Q_EMIT FFTSize (m_FFTSize);
+  m_hsymStop=174;
+  if(m_config.decode_at_52s()) m_hsymStop=183;
+  m_toneSpacing=0.0;
+  ui->actionJT65->setChecked(true);
+  VHF_features_enabled(bVHF);
+  m_wideGraph->setPeriod(m_TRperiod,m_nsps);
+  m_wideGraph->setMode(m_mode);
+  m_wideGraph->setModeTx(m_modeTx);
+  setup_status_bar (bVHF);
+  m_bFastMode=false;
+  m_bFast9=false;
+  ui->sbSubmode->setMaximum(2);
+  if(bVHF) {
+    ui->sbSubmode->setValue(m_nSubMode);
+    ui->label_6->setText("Single-Period Decodes");
+    ui->label_7->setText("Average Decodes");
+  } else {
+    ui->sbSubmode->setValue(0);
+    ui->label_6->setText("Band Activity");
+    ui->label_7->setText("Alerts / QSOs");
+  }
+  if(bVHF) {
+    displayWidgets(nWidgets("1111100100001111101011000100100000000"));    //avt 4/7/20
+  //                         0123456789012345678901234567890123456
+  } else {
+    displayWidgets(nWidgets("1110100001001110000100000001100000010"));    //avt 3/1/25
+  //                         0123456789012345678901234567890123456
+  }
+  fast_config(false);
+
+  ui->cbAutoSeq->setEnabled(true);      //avt 3/30/20
+  ui->cbAutoSeq->setChecked(bAuto);      //avt 5/6/19
+  ui->cbFirst->setEnabled(true);      //avt 3/30/20
+  ui->cbFirst->setChecked(bCallFirst);      //avt 5/6/19
+  if(ui->cbShMsgs->isChecked()) {
+    ui->cbAutoSeq->setChecked(false);
+    ui->cbAutoSeq->setVisible(false);
+  }
+  updateAutoButton();
+  updateAdd73orRR73();
+  updateModeCtrls();
+  m_prevCqFreq = 0;     //avt 4/7/20
+  statusChanged();
+}
+
+void MainWindow::on_actionMSK144_triggered()
+{
+  if(SpecOp::EU_VHF < m_config.special_op_id()) {
+// We are rejecting the requested mode change, so re-check the old mode
+    if("FT8"==m_mode) ui->actionFT8->setChecked(true); 
+    if("JT4"==m_mode) ui->actionJT4->setChecked(true); 
+    if("JT9"==m_mode) ui->actionJT9->setChecked(true); 
+    if("JT65"==m_mode) ui->actionJT65->setChecked(true); 
+    if("JT9_JT65"==m_mode) ui->actionJT9_JT65->setChecked(true); 
+    if("ISCAT"==m_mode) ui->actionISCAT->setChecked(true); 
+    if("QRA64"==m_mode) ui->actionQRA64->setChecked(true); 
+    if("WSPR"==m_mode) ui->actionWSPR->setChecked(true); 
+    if("Echo"==m_mode) ui->actionEcho->setChecked(true); 
+    if("FreqCal"==m_mode) ui->actionFreqCal->setChecked(true); 
+// Make sure that MSK144 is not checked.
+    ui->actionMSK144->setChecked(false);
+    MessageBox::warning_message (this, tr ("Improper mode"),
+       "MSK144 not available if Field Day, or RTTY contest is selected.");
+    return;
+  }
+  m_mode="MSK144";
+  m_modeTx="MSK144";
+  ui->actionMSK144->setChecked(true);
+  switch_mode (Modes::MSK144);
+  m_nsps=6;
+  m_FFTSize = 7 * 512;
+  Q_EMIT FFTSize (m_FFTSize);
+  setup_status_bar (true);
+  m_toneSpacing=0.0;
+  WSPR_config(false);
+  VHF_features_enabled(true);
+  m_bFastMode=true;
+  m_bFast9=false;
+  m_TRperiod = ui->sbTR->value ();
+  m_wideGraph->hide();
+  m_fastGraph->show();
+  ui->TxFreqSpinBox->setValue(1500);
+  ui->RxFreqSpinBox->setValue(1500);
+  ui->RxFreqSpinBox->setMinimum(1400);
+  ui->RxFreqSpinBox->setMaximum(1600);
+  ui->RxFreqSpinBox->setSingleStep(10);
+  ui->decodedTextLabel->setText("UTC     dB    T Freq    Message");
+  ui->decodedTextLabel2->setText("UTC     dB    T Freq    Message");
+  m_modulator->setTRPeriod(m_TRperiod); // TODO - not thread safe
+  m_detector->setTRPeriod(m_TRperiod);  // TODO - not thread safe
+  m_fastGraph->setTRPeriod(m_TRperiod);
+  ui->label_6->setText("Band Activity");
+  ui->label_7->setText("Tx Messages");
+  ui->actionMSK144->setChecked(true);
+  ui->rptSpinBox->setMinimum(-8);
+  ui->rptSpinBox->setMaximum(24);
+  ui->rptSpinBox->setValue(0);
+  ui->rptSpinBox->setSingleStep(1);
+  ui->sbFtol->values ({20, 50, 100, 200});
+  displayWidgets(nWidgets("1011111101000000000100010000100000000"));
+  //                       0123456789012345678901234567890123456
+  fast_config(m_bFastMode);
+  statusChanged();
+
+  QString t0="";
+  if(SpecOp::NA_VHF==m_config.special_op_id()) t0+="NA VHF";
+  if(SpecOp::EU_VHF==m_config.special_op_id()) t0+="EU VHF";
+  if(t0=="") {
+    ui->labDXped->setVisible(false);
+  } else {
+    ui->labDXped->setVisible(true);
+    ui->labDXped->setText(t0);
+  }
+  
+  ui->cbAutoSeq->setEnabled(true);      //avt 7/25/25
+  ui->cbFirst->setEnabled(true);      //avt 7/25/25
+  updateAutoButton();
+  updateAdd73orRR73();
+  updateModeCtrls();
 }
 
 void MainWindow::on_actionJT4_triggered()
@@ -7836,72 +8026,6 @@ void MainWindow::on_actionJT9_JT65_triggered()
   statusChanged();
 }
 
-void MainWindow::on_actionJT65_triggered()
-{
-  if(m_mode=="JT4" or m_mode.startsWith ("WSPR")) {
-// If coming from JT4 or WSPR mode, pretend temporarily that we're coming
-// from JT9 and click the pbTxMode button
-    m_modeTx="JT9";
-    on_pbTxMode_clicked();
-  }
-  bool bAuto = ui->cbAutoSeq->isChecked();   //avt 5/6/19
-  bool bCallFirst = ui->cbFirst->isChecked();   //avt 5/6/19
-  on_actionJT9_triggered();
-  m_mode="JT65";
-  m_modeTx="JT65";
-  bool bVHF=m_config.enable_VHF_features();
-  WSPR_config(false);
-  switch_mode (Modes::JT65);
-  if(m_modeTx!="JT65") on_pbTxMode_clicked();
-  m_TRperiod=60;
-  m_modulator->setTRPeriod(m_TRperiod); // TODO - not thread safe
-  m_detector->setTRPeriod(m_TRperiod);   // TODO - not thread safe
-  m_nsps=6912;                   //For symspec only
-  m_FFTSize = m_nsps / 2;
-  Q_EMIT FFTSize (m_FFTSize);
-  m_hsymStop=174;
-  if(m_config.decode_at_52s()) m_hsymStop=183;
-  m_toneSpacing=0.0;
-  ui->actionJT65->setChecked(true);
-  VHF_features_enabled(bVHF);
-  m_wideGraph->setPeriod(m_TRperiod,m_nsps);
-  m_wideGraph->setMode(m_mode);
-  m_wideGraph->setModeTx(m_modeTx);
-  setup_status_bar (bVHF);
-  m_bFastMode=false;
-  m_bFast9=false;
-  ui->sbSubmode->setMaximum(2);
-  if(bVHF) {
-    ui->sbSubmode->setValue(m_nSubMode);
-    ui->label_6->setText("Single-Period Decodes");
-    ui->label_7->setText("Average Decodes");
-  } else {
-    ui->sbSubmode->setValue(0);
-    ui->label_6->setText("Band Activity");
-    ui->label_7->setText("Alerts / QSOs");
-  }
-  if(bVHF) {
-    displayWidgets(nWidgets("1111100100001111101011000100100000000"));    //avt 4/7/20
-  //                         0123456789012345678901234567890123456
-  } else {
-    displayWidgets(nWidgets("1110100001001110000100000001100000011"));    //avt 3/1/25
-  //                         0123456789012345678901234567890123456
-  }
-  fast_config(false);
-
-  ui->cbAutoSeq->setEnabled(true);      //avt 3/30/20
-  ui->cbFirst->setEnabled(true);      //avt 3/30/20
-  ui->cbAutoSeq->setChecked(bAuto);      //avt 5/6/19
-  ui->cbFirst->setChecked(bCallFirst);      //avt 5/6/19
-  if(ui->cbShMsgs->isChecked()) {
-    ui->cbAutoSeq->setChecked(false);
-    ui->cbAutoSeq->setVisible(false);
-  }
-  statusChanged();
-  
-  m_prevCqFreq = 0;     //avt 4/7/20
-}
-
 void MainWindow::on_actionQRA64_triggered()
 {
   int n=m_nSubMode;
@@ -7963,76 +8087,6 @@ void MainWindow::on_actionISCAT_triggered()
   //                       0123456789012345678901234567890123456
   fast_config(true);
   statusChanged ();
-}
-
-void MainWindow::on_actionMSK144_triggered()
-{
-  if(SpecOp::EU_VHF < m_config.special_op_id()) {
-// We are rejecting the requested mode change, so re-check the old mode
-    if("FT8"==m_mode) ui->actionFT8->setChecked(true); 
-    if("JT4"==m_mode) ui->actionJT4->setChecked(true); 
-    if("JT9"==m_mode) ui->actionJT9->setChecked(true); 
-    if("JT65"==m_mode) ui->actionJT65->setChecked(true); 
-    if("JT9_JT65"==m_mode) ui->actionJT9_JT65->setChecked(true); 
-    if("ISCAT"==m_mode) ui->actionISCAT->setChecked(true); 
-    if("QRA64"==m_mode) ui->actionQRA64->setChecked(true); 
-    if("WSPR"==m_mode) ui->actionWSPR->setChecked(true); 
-    if("Echo"==m_mode) ui->actionEcho->setChecked(true); 
-    if("FreqCal"==m_mode) ui->actionFreqCal->setChecked(true); 
-// Make sure that MSK144 is not checked.
-    ui->actionMSK144->setChecked(false);
-    MessageBox::warning_message (this, tr ("Improper mode"),
-       "MSK144 not available if Field Day, or RTTY contest is selected.");
-    return;
-  }
-  m_mode="MSK144";
-  m_modeTx="MSK144";
-  ui->actionMSK144->setChecked(true);
-  switch_mode (Modes::MSK144);
-  m_nsps=6;
-  m_FFTSize = 7 * 512;
-  Q_EMIT FFTSize (m_FFTSize);
-  setup_status_bar (true);
-  m_toneSpacing=0.0;
-  WSPR_config(false);
-  VHF_features_enabled(true);
-  m_bFastMode=true;
-  m_bFast9=false;
-  m_TRperiod = ui->sbTR->value ();
-  m_wideGraph->hide();
-  m_fastGraph->show();
-  ui->TxFreqSpinBox->setValue(1500);
-  ui->RxFreqSpinBox->setValue(1500);
-  ui->RxFreqSpinBox->setMinimum(1400);
-  ui->RxFreqSpinBox->setMaximum(1600);
-  ui->RxFreqSpinBox->setSingleStep(10);
-  ui->decodedTextLabel->setText("UTC     dB    T Freq    Message");
-  ui->decodedTextLabel2->setText("UTC     dB    T Freq    Message");
-  m_modulator->setTRPeriod(m_TRperiod); // TODO - not thread safe
-  m_detector->setTRPeriod(m_TRperiod);  // TODO - not thread safe
-  m_fastGraph->setTRPeriod(m_TRperiod);
-  ui->label_6->setText("Band Activity");
-  ui->label_7->setText("Tx Messages");
-  ui->actionMSK144->setChecked(true);
-  ui->rptSpinBox->setMinimum(-8);
-  ui->rptSpinBox->setMaximum(24);
-  ui->rptSpinBox->setValue(0);
-  ui->rptSpinBox->setSingleStep(1);
-  ui->sbFtol->values ({20, 50, 100, 200});
-  displayWidgets(nWidgets("1011111101000000000100010000100000000"));   //avt 4/7/20
-  //                       0123456789012345678901234567890123456
-  fast_config(m_bFastMode);
-  statusChanged();
-
-  QString t0="";
-  if(SpecOp::NA_VHF==m_config.special_op_id()) t0+="NA VHF";
-  if(SpecOp::EU_VHF==m_config.special_op_id()) t0+="EU VHF";
-  if(t0=="") {
-    ui->labDXped->setVisible(false);
-  } else {
-    ui->labDXped->setVisible(true);
-    ui->labDXped->setText(t0);
-  }
 }
 
 void MainWindow::on_actionWSPR_triggered()
@@ -8391,16 +8445,6 @@ void MainWindow::on_bandComboBox_currentIndexChanged (int index)
       ui->bandComboBox->setCurrentText (m_config.bands ()->oob ());
     }
   displayDialFrequency ();
-  
-  if (m_setupStable and band.size()) {         //avt 3/27/25 no more spurious notifications
-    debugToFile("bandCombo band:" + band);
-    clearAllCallInfo();
-    readConfCalls(band);
-    m_prevCqFreq = 0;     //avt 4/7/20
-    ui->decodedTextBrowser2->erase ();           //avt 2/14/19
-    ui->decodedTextBrowser->erase ();           //avt 2/14/19
-    m_wideGraph->clear();           //avt 2/14/19
-  }
 }
 
 void MainWindow::on_bandComboBox_activated (int index)
@@ -8445,6 +8489,7 @@ void MainWindow::band_changed (Frequency f)
 //        m_send_RR73 = false;        // force user to reassess on new band
       }
     }
+  
     m_lastBand.clear ();
     m_bandEdited = false;
     psk_Reporter->sendReport();      // Upload any queued spots before changing band
@@ -8663,6 +8708,7 @@ void MainWindow::on_stopTxButton_clicked()                    //Stop Tx
   ui->cqButton->setChecked(false);     //avt 3/9/25
   ui->listenButton->setChecked(false);     //avt 3/9/25
   updateAutoButton();
+  updateModeCtrls();          //avt 7/12/25
   if (m_tune) stop_tuning ();
   if (m_auto and !m_tuneup) auto_tx_mode (false);
   m_btxok=false;
@@ -9846,18 +9892,14 @@ void MainWindow::on_actionErase_reference_spectrum_triggered()
 
 void MainWindow::on_actionDownload_from_LOTW_triggered()
 {
-  if (!m_logbookRead or dnLotw != nullptr or upLotw != nullptr) {
-    showStatusMessage("Wait for the logbook to finish updating...");
-    last_tx_label.setText("Waiting for logbook...");
+  if (!m_config.lotw_pwd().size() || !m_config.my_callsign().size()) {
+    MessageBox::information_message (this, tr ("Call sign and LOTW password are required.\n\nEnter these in Settings at the General tab."));
     return;
   }
-  
-  QString filePathName = m_config.writeable_data_dir().absolutePath() + "/" + COPY_LOG_SCRIPT;
-  debugToFile("actionDow filePathName:" + filePathName);
-  QFile f{filePathName};
-  if (!f.exists(filePathName)) {
-    MessageBox::information_message (this, tr ("Feature not available"));
-    updateModeCtrls();
+
+  if (!m_logbookRead or upLotw != nullptr) {
+    showStatusMessage("Wait for the logbook to finish updating...");
+    last_tx_label.setText("Waiting for logbook...");
     return;
   }
   
@@ -9870,116 +9912,245 @@ void MainWindow::on_actionDownload_from_LOTW_triggered()
     return;
   }
 
-  if (!m_config.lotw_pwd().size()) {
-    MessageBox::information_message (this, tr ("LOTW password is required.\n\nEnter your LOTW password in Settings at the General tab."));
-    return;
-  }
+  //remove previously-downloaded LOTW file
+  QString tmpFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + TEMP_LOG_FNAME;
+  if (QFile::exists(tmpFilePathName)) QFile::remove(tmpFilePathName);
 
-  //QString terminalCommand = "x-terminal-emulator";
-  QStringList arguments;
-  arguments << m_config.my_callsign() << m_config.lotw_pwd() << m_config.writeable_data_dir().absolutePath(); 
-  QString terminalCommand = filePathName;
-
-  dnLotw = new QProcess(this);
-  dnLotw->start(terminalCommand, arguments);
-  updateModeCtrls();
+  //download the LOTW QSO file
+  url_valid = true;
+  redirect_count = 0;
+  dlQsoReqReply = false;  //known Qt bug where finished signal generates duplicate calls to slot
+  sav_file.setFileName(tmpFilePathName);
   
-  if (!dnLotw->waitForStarted()) {
-    debugToFile("actionDow Error starting process: " + dnLotw->errorString());
-    MessageBox::warning_message (this, tr ("Download from LOTW Error"), dnLotw->errorString());
-    delete dnLotw;
-    dnLotw = nullptr;
-    m_logbookRead = true;   //allow another attempt
-    updateModeCtrls();
-    return;
+  QString startDate;
+  if (ui->cbAddNoQsl->isChecked()) {
+    startDate = (QDateTime::currentDateTimeUtc().addDays(-28)).toString("yyyy-MM-dd");
+  } else {
+    startDate = "1970-01-01";
   }
   
-  last_tx_label.setText(tr ("Downloading from LOTW..."));
+  auto url = QString{"https://lotw.arrl.org/lotwuser/lotwreport.adi?login=%1&password=%2&qso_query=1&qso_qsorxsince=%3&qso_qsl=no"}
+      .arg(m_config.my_callsign())
+      .arg(m_config.lotw_pwd())
+      .arg(startDate);
+  debugToFile("actionDow url:" + url);
+  current_url = QUrl(url);
+  connect(this, &MainWindow::download_finished, this, &MainWindow::downloadQsoComplete);
+  download(current_url);
 
-  connect(dnLotw, static_cast<void (QProcess::*)(int, QProcess::ExitStatus)> (&QProcess::finished),   //avt 4/1/25
-          [this] (int exitCode, QProcess::ExitStatus status) {
-            MainWindow::downloadLotwFinished (exitCode, status);
-          });
-  connect(dnLotw, static_cast<void (QProcess::*) (QProcess::ProcessError)> (&QProcess::error),
-          [this] (QProcess::ProcessError error) {
-            MainWindow::lotwError (dnLotw, error);
-          });
-  
   m_logbookRead = false;    //avt 4/5/25 block auto mode and requesting up/download
   updateModeCtrls();
+  last_tx_label.setText(tr ("Downloading from LOTW..."));
 }
 
-void MainWindow::downloadLotwFinished(int exitCode, QProcess::ExitStatus exitStatus)
+void MainWindow::downloadQsoComplete(bool result)
 {
-  debugToFile("downldFin download script finished, exitCode:" + intToString(exitCode));
-
-  if (exitStatus != QProcess::NormalExit) {
-    debugToFile("actionDow download stopped unexpectedly");
-    MessageBox::information_message (this, "Download from LOTW stopped unexpectedly");
-    delete dnLotw;
-    dnLotw = nullptr;
+  //known Qt bug where finished signal generates duplicate calls to slot
+  if (dlQsoReqReply) {   //already relied to this signal
+    debugToFile("dlLotwCom dlQsoReqReply:true");
+    return;
+  }
+  dlQsoReqReply = true;
+  
+  debugToFile("dlLotwCom result:" + boolToString(result));
+  
+  if (!result) {
     m_logbookRead = true;   //allow another attempt
     updateModeCtrls();
     return;
   }
-  
-  //read download script exit status
-  bool fStatus = false;
-  bool adiFound = false;
+
+  //test downloaded LOTW file, bad password results in HTML page
+  QString tmpFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + TEMP_LOG_FNAME;
+  bool adiFound = QFile::exists(tmpFilePathName);
   bool isAdi = false;
-  QString line;
-  QString filePathName = m_config.writeable_data_dir().absolutePath() + "/cmd_status.txt";
-  QFile cs{filePathName}; 
-  if (cs.exists(filePathName) and (cs.open(QIODevice::ReadOnly | QIODevice::Text))) {
-    QTextStream in(&cs);
-    line = in.readLine(0);
-    fStatus = line == "0";
-    debugToFile("downldFin fStatus:" + boolToString(fStatus));
-  }
-  //test log file, bad password results in HTML page
-  QString adiFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + FULL_LOG_FNAME;
-  if (fStatus) {
-    adiFound = QFile::exists(adiFilePathName);
-    debugToFile("downldFin adiFound:" + boolToString(adiFound));
- }
-  
+  debugToFile("dlLotwCom adiFound:" + boolToString(adiFound));
+   
   if (adiFound) {
-    QFile f{adiFilePathName};
+    QFile f{tmpFilePathName};
     f.open(QIODevice::ReadOnly | QIODevice::Text);
     QTextStream in2(&f);
-    line = in2.readLine(0);
-    debugToFile("downldFin line:" + line);
+    QString line = in2.readLine(0);
+    debugToFile("dlLotwCom line:" + line);
     isAdi = !line.contains("HTML");
-    debugToFile("downldFin isAdi:" + boolToString(isAdi));
+    debugToFile("dlLotwCom isAdi:" + boolToString(isAdi));
+    f.close();
   }
 
   if (isAdi) {
-    debugToFile("downldFin download success");
-    m_logBook.rescan();
+    debugToFile("dlLotwCom download success");
+    if (ui->cbAddNoQsl->isChecked()) {
+      downloadQslOnly();
+      return;
+    }
+    //rename downloaded file to log file
+    QString logFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + FULL_LOG_FNAME;
+    if (QFile::exists(logFilePathName)) {
+      QString savFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + QDateTime::currentDateTimeUtc().toString("yyMMdd_hhmmss").toLocal8Bit() + "_" + FULL_LOG_FNAME;
+      QFile::rename(logFilePathName, savFilePathName);
+    }
+    QFile::rename(tmpFilePathName, logFilePathName);
+    
+    MessageBox::information_message (this, tr ("Download QSOs from LOTW succeeded."));
     m_logbookRead = false;        //block auto mode and requesting download
-    debugToFile("actionDow m_logbookRead:false");
-    MessageBox::information_message (this, tr ("Download from LOTW succeeded, re-scanning ADIF log."));
+    debugToFile("dlLotwCom m_logbookRead:false");
+    m_logBook.rescan();
   } else {
-    debugToFile(QString{"downldFin download failed, fStatus:%1 isAdi:%2 adiFound:%3"}.arg(fStatus).arg(isAdi).arg(adiFound));
+    debugToFile(QString{"dlLotwCom download failed, isAdi:%1 adiFound:%2"}.arg(isAdi).arg(adiFound));
     QString reason{};
-    if (!fStatus or !adiFound) {
+    if (!adiFound) {
       reason = "Check internet connection.";
     } else if (!isAdi) {
       reason = "Incorrect LOTW callsign/password?";
     }
-    MessageBox::information_message (this, tr ("Download from LOTW failed.") + "\n\n" + reason);
+    MessageBox::information_message (this, tr ("Download QSOs from LOTW failed.") + "\n\n" + reason);
     m_logbookRead = true;   //allow another attempt
+    debugToFile("dlLotwCom m_logbookRead:true");
+  }
+
+  updateModeCtrls();
+  cleanupAdiBackupFiles();
+}
+
+void MainWindow::downloadQslOnly()
+{
+  //remove previously-downloaded LOTW file
+  QString tmpFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + TEMP_LOG_QSL_FNAME;
+  if (QFile::exists(tmpFilePathName)) QFile::remove(tmpFilePathName);
+
+  //download the LOTW QSL file
+  url_valid = true;
+  redirect_count = 0;
+  dlQslReqReply = false;  //known Qt bug where finished signal generates duplicate calls to slot
+  sav_file.setFileName(tmpFilePathName);
+  QString endDate = (QDateTime::currentDateTimeUtc().addDays(-28)).toString("yyyy-MM-dd");
+  auto url = QString{"https://lotw.arrl.org/lotwuser/lotwreport.adi?login=%1&password=%2&qso_query=1&qso_qsorxsince=1970-01-01&qso_qsl=yes&qso_enddate=%3"}
+      .arg(m_config.my_callsign())
+      .arg(m_config.lotw_pwd())
+      .arg(endDate);
+  debugToFile("dlQslOnly url:" + url);
+  current_url = QUrl(url);
+  connect(this, &MainWindow::download_finished, this, &MainWindow::downloadQslComplete);
+  download(current_url);
+}
+
+void MainWindow::downloadQslComplete(bool result)
+{
+  //known Qt bug where finished signal generates duplicate calls to slot
+  if (dlQslReqReply) {   //already relied to this signal
+    debugToFile("dlQslComp dlQslReqReply:true");
+    return;
+  }
+  dlQslReqReply = true;
+  
+  debugToFile("dlQslComp result:" + boolToString(result));
+  
+  if (!result) {
+    m_logbookRead = true;   //allow another attempt
+    updateModeCtrls();
+    return;
+  }
+
+  bool success = false;
+  
+  //create merged QSL/QSO file
+  QString line;
+    
+  //wsjtx_log.adi
+  QString ofFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + FULL_LOG_TMP_FNAME;
+  if (QFile::exists(ofFilePathName)) QFile::remove(ofFilePathName);
+  QFile outFile(ofFilePathName);
+  if(!outFile.open(QIODevice::WriteOnly | QIODevice::Text))
+  {
+    debugToFile("dlQslComp unable to open " + ofFilePathName);
+    MessageBox::warning_message (this, tr ("Unable to open file"), ofFilePathName);
+  } else {
+    //debugToFile("dlQslComp opened " + ofFilePathName);
+    QTextStream outStream(&outFile);
+    
+    //lotwreport_qsl.adi
+    //keep the header, drop the eof
+    QString ifFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + TEMP_LOG_QSL_FNAME;
+    QFile inFile(ifFilePathName);
+    if(!inFile.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+      debugToFile("dlQslComp unable to open " + ifFilePathName);
+      MessageBox::warning_message (this, tr ("Unable to open file"), ifFilePathName);
+    } else {
+      //debugToFile("dlQslComp opened " + ifFilePathName);
+      QTextStream inStream(&inFile);
+    
+      while (!inStream.atEnd()) {
+        line = inStream.readLine();
+        if (line == "<APP_LoTW_EOF>") {
+          //debugToFile("dlQslComp found <APP_LoTW_EOF>");
+          break;
+        }
+        outStream << line << endl;
+      }
+      inFile.close();
+      //debugToFile("dlQslComp closed " + ifFilePathName);
+
+      //lotwreport.adi
+      //drop the header, keep the eof
+      QString if2FilePathName = m_config.writeable_data_dir().absolutePath() + "/" + TEMP_LOG_FNAME;
+      QFile inFile2(if2FilePathName);
+      if(!inFile2.open(QIODevice::ReadOnly | QIODevice::Text))
+      {
+        debugToFile("dlQslComp unable to open " + if2FilePathName);
+        MessageBox::warning_message (this, tr ("Unable to open file"), if2FilePathName);
+      } else {
+        //debugToFile("dlQslComp opened " + if2FilePathName);
+        QTextStream inStream2(&inFile2);
+    
+        while (!inStream2.atEnd()) {
+          if (inStream2.readLine() == "<eoh>") {
+            //debugToFile("dlQslComp found <eoh>");
+            break;
+          }
+        }
+    
+        while (!inStream2.atEnd()) {
+          outStream << inStream2.readLine() << endl;
+        }
+        inFile2.close();
+        //debugToFile("dlQslComp closed " + if2FilePathName);
+        outFile.close();
+        //debugToFile("dlQslComp closed " + ofFilePathName);
+      
+        //rename merged file to log file
+        QString logFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + FULL_LOG_FNAME;
+        if (QFile::exists(logFilePathName)) {
+          QString savFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + QDateTime::currentDateTimeUtc().toString("yyMMdd_hhmmss").toLocal8Bit() + "_" + FULL_LOG_FNAME;
+          QFile::rename(logFilePathName, savFilePathName);
+          //debugToFile("dlQslComp renamed " + logFilePathName + " to " + savFilePathName);
+        }
+        QFile::rename(ofFilePathName, logFilePathName);
+        //debugToFile("dlQslComp renamed " + ofFilePathName + " to " + logFilePathName);
+        
+        success = true;
+      }
+    }
   }
   
-  delete dnLotw;
-  dnLotw = nullptr;
+  if (success) {
+    MessageBox::information_message (this, tr ("Download QSLs from LOTW succeeded."));    
+    m_logbookRead = false;        //block auto mode and requesting download
+    debugToFile("dlQslComp success:true m_logbookRead:false");
+    m_logBook.rescan();
+  } else {
+    MessageBox::information_message (this, tr ("Download QSLs from LOTW failed."));
+    m_logbookRead = true;   //allow another attempt
+    debugToFile("dlQslComp success:false, m_logbookRead:true");
+  }
+  
   updateModeCtrls(); 
   cleanupAdiBackupFiles();
 }
 
 void MainWindow::on_actionUpload_to_LOTW_triggered()
 {
-  if (!m_logbookRead or upLotw != nullptr or dnLotw != nullptr) {
+  if (!m_logbookRead or upLotw != nullptr) {
     showStatusMessage("Wait for logbook to finish updating...");
     last_tx_label.setText("Waiting for logbook...");
     return;
@@ -9993,9 +10164,11 @@ void MainWindow::on_actionUpload_to_LOTW_triggered()
     return;
   }
   
+  last_tx_label.setText(tr ("Starting TQSL..."));
+
   //make a copy of the lotw.adi file in case it changes
   QString adiTmpFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + INCR_LOG_TMP_FNAME;
-  debugToFile("actionUpl adiTmpFilePathName:" + adiFilePathName);
+  debugToFile("actionUpl adiTmpFilePathName:" + adiTmpFilePathName);
   if (QFile::exists(adiTmpFilePathName)) {
     QFile::remove(adiTmpFilePathName);
     debugToFile("actionUpl removed " + adiTmpFilePathName);
@@ -10005,13 +10178,22 @@ void MainWindow::on_actionUpload_to_LOTW_triggered()
  
   upLotw = new QProcess(this);
   updateModeCtrls();
+#ifdef WIN32
+  QString program = "C:/Program Files (x86)/TrustedQSL/tqsl.exe";   //spaces in file/path name OK here
+  //debugToFile("actionUpl program:" + program);
+  //debugToFile("actionUpl exists:" + boolToString(QFile::exists(program)));
+  if (!QFile::exists(program)) program = "tqsl";
+#else
   QString program = "tqsl";
+#endif
   QStringList arguments;
   arguments << "-d" << "--action=compliant" << "-q" << "-u" << adiTmpFilePathName;
-  debugToFile("actionUpl program: " + program + " arguments:" + arguments.join(","));
+  debugToFile("actionUpl program:" + program + " arguments:" + arguments.join(","));
+  upLotw->setWorkingDirectory(m_config.writeable_data_dir().absolutePath());
   upLotw->start(program, arguments);
   
   if (!upLotw->waitForStarted()) {
+    last_tx_label.setText("");
     // Handle error, process couldn't start
     debugToFile("actionUpl Error starting process: " + upLotw->errorString());
     MessageBox::warning_message (this, tr ("Upload to LOTW Error"), upLotw->errorString());
@@ -10101,7 +10283,7 @@ void MainWindow::uploadLotwFinished(int exitCode, QProcess::ExitStatus exitStatu
         last_tx_label.setText("Logged: " + intToString(m_loggedCalls.size()) + " / To upload: " + intToString(m_incrLogCount));
       }
     }
-    QString txt = exitCode ? "Duplicate and/or out of date range QSOs were ignored.\n\nOtherwise, upload to LOTW was successful." : "Upload to LOTW successful";
+    QString txt = exitCode ? "Duplicate and/or out of date range QSOs were ignored, check TQSL for certificate expirations.\n\n(Some QSOs may have been uploaded successfully to LOTW)" : "Upload to LOTW successful";
     MessageBox::information_message (this, txt);
   }
   
@@ -10464,44 +10646,6 @@ void MainWindow::removeCallsByPeriod()
   }
 }
 
-void MainWindow::createCopyLogScript()
-{
-  QString file = m_config.writeable_data_dir().absolutePath() + "/" + COPY_LOG_SCRIPT;
-  
-  if (QFile::exists(file)) {
-    debugToFile("createCop removing:" + file);
-    QFile::remove(file);
-  }
-  
-  QFile f(file);
-  f.open(QIODevice::ReadWrite);
-  
-  if(!f.isOpen())
-  {
-    debugToFile("createCop failed to open:" + file);
-    MessageBox::warning_message (this, tr ("Unable to create file"), file);
-    return;
-  }
- 
-  debugToFile("createCop opened:" + file);
-  QTextStream outStream(&f);
-  foreach(QString str, m_copy_log) {
-    //debugToFile("createCop writing:" + str);
-    outStream << str << endl;
-  }
-  f.close();
-  debugToFile("createCop closed:" + file);
-  
-  bool b = QFile(file).setPermissions(
-      QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
-      | QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser);
-  debugToFile("createCop setPermissions:" + boolToString(b));
-  if(!b)
-  {
-    MessageBox::warning_message (this, tr ("Unable to set permissions"), file);
-  }
-}
-
 //remove extra XXX_wstx_log.adi files
 void MainWindow::cleanupAdiBackupFiles()
 {
@@ -10543,9 +10687,9 @@ bool MainWindow::isAcceptableTxStartTime()
 
 void MainWindow::setCallInProg(QString call)    //avt 4/6/25
 {
-  debugToFile(QString{"setCallIn call:'%1' repeat Tx limit:%2"}.arg(call).arg(ui->sbTxRepeat->value()));
+  debugToFile(QString{"setCallIn call:'%1' repeat Tx limit:%2 visible:%3"}.arg(call).arg(ui->sbTxRepeat->value()).arg(ui->sbTxRepeat->isVisible()));
   if (!call.size() or call != m_callInProg) {       //new call in progress
-    if (!ui->sbTxRepeat->value()) {             //is in hold mode
+    if (ui->sbTxRepeat->isVisible() and !ui->sbTxRepeat->value()) {             //is in hold mode
       ui->sbTxRepeat->setValue(m_prefTxLimit);  //clear hold
       debugToFile(QString{"setCallIn repeat Tx limit:%1"}.arg(ui->sbTxRepeat->value()));
     }
@@ -10553,13 +10697,17 @@ void MainWindow::setCallInProg(QString call)    //avt 4/6/25
   m_callInProg = call;
   
   if (call.size()) {  //call in progress
-    ui->sbTxRepeat->setMinimum(0);
-    ui->sbTxRepeat->setSpecialValueText("Repeat Tx limit:  None");
+    if (ui->sbTxRepeat->isVisible()) {
+      ui->sbTxRepeat->setMinimum(0);
+      ui->sbTxRepeat->setSpecialValueText("Repeat Tx limit:  None");
+    }
     ui->label_4->setStyleSheet("QLabel {color: black;}");
     ui->label_3->setStyleSheet("QLabel {color: black;}");
   } else {            //no call in progress
-    ui->sbTxRepeat->setMinimum(1);
-    ui->sbTxRepeat->setSpecialValueText("");
+    if (ui->sbTxRepeat->isVisible()) {
+      ui->sbTxRepeat->setMinimum(1);
+      ui->sbTxRepeat->setSpecialValueText("");
+    }
     ui->label_4->setStyleSheet("QLabel {color: white;}");
     ui->label_3->setStyleSheet("QLabel {color: white;}");
   }
@@ -10588,6 +10736,7 @@ void MainWindow::setIncrLogCount()
 void MainWindow::testDecodedText()
 {
    QList<QString> decodes {
+      //invalid
       "",
       "CQ <...>",
       "CQ ...",
@@ -10602,10 +10751,12 @@ void MainWindow::testDecodedText()
       "WM8Q ...",
       "... WM8Q DN61",
       "<...> WM8Q DN61",
-      "WM8Q DN61",
       "CQ CQ WM8Q",
-      "WM8Q K1JT",
+      "CQ OC EU WM8Q",
+      "CQ OC EU WM8Q DN61",
+      //valid
       "CQ WM8Q",
+      "WM8Q K1JT",
       "WM8Q K1JT EM45",
       "WM8Q K1JT +10",
       "WM8Q/P K1JT/P EM45",
@@ -10614,22 +10765,38 @@ void MainWindow::testDecodedText()
       "WM8Q K1JT RRR",
       "WM8Q K1JT 73",
       "WM8Q K1JT RR73",
+      "WM8Q DN61",    //must be allowed
+      "CQ DX DN61",    //must be allowed
       "CQ DX WM8Q",
       "CQ WM8Q DN61",
       "CQ POTA WM8Q",
       "CQ POTA WM8Q/P",
       "CQ DX FR5/WM8Q DN61",
       "CQ DX FR5/WM8Q/P DN61",
-      "CQ POTA WM8Q",
       "CQ POTA WM8Q DN61",
       "CQ POTA DX10AN KH6/WO0OPS/P", //max len for dummy decode constructor will be 27
+      "CQ RI42SP",   //deCall contains a grid
      //012345678901234567890123456
       
       //field day
+      //invalid
+      "CQ WM8Q",
+      "CQ FD",
+      "K1JT WM8Q R 2B WY TU",
+      "WM8Q K1JT 2B",
+      "WM8Q K1JT WY",
+      "WM8Q K1JT R+10",
+      "WM8Q K1JT -10",
+      "WM8Q K1JT RRR",
+      "WM8Q K1JT DN61",
+      //valid
       "CQ FD WM8Q DN61",
+      "CQ FD WM8Q",
       "WM8Q K1JT 2B WY",
-      "K1JT WM8Q R  2B WY"
-  };
+      "K1JT WM8Q R 2B WY",
+      "WM8Q K1JT RR73",
+      "WM8Q K1JT 73"
+ };
     
   foreach(QString msg, decodes)
   {
@@ -10694,7 +10861,7 @@ bool MainWindow::isCabrilloLogEnabled()
 bool MainWindow::addPendingCall(DecodedText decodedText)    //FD
 {
   QString call = decodedText.deCall();
-  if ((!(ui->cbConfStart->isChecked() or m_config.special_op_id() == SpecOp::FIELD_DAY))
+  if ((!((ui->cbConfStart->isVisible() and ui->cbConfStart->isChecked()) or m_config.special_op_id() == SpecOp::FIELD_DAY))
       or !isAnyAutoMode() or m_msgMap.contains(call) or m_confCalls.contains(call)) return false;
   
   //detect decode already present in queue
@@ -10717,13 +10884,13 @@ bool MainWindow::addPendingCall(DecodedText decodedText)    //FD
 
 bool MainWindow::canAdd73orRR73()
 {
-  return ui->cbAdd73orRR73->isChecked();
+  return ui->cbAdd73orRR73->isVisible() and ui->cbAdd73orRR73->isChecked();
 }
 
 bool MainWindow::canAddOtherMsg(DecodedText decodedText)
 {
-    debugToFile(QString{"canAddOth isChecked:%1 reply:%2 report:%3 rogerReport:%4 rogers:%5"}
-                .arg(ui->cbAddOther->isChecked())
+    debugToFile(QString{"canAddOth isVisible&isChecked:%1 reply:%2 report:%3 rogerReport:%4 rogers:%5"}
+                .arg(ui->cbAddOther->isVisible() and ui->cbAddOther->isChecked())
                 .arg(decodedText.is_reply())
                 .arg(decodedText.is_report())
                 .arg(decodedText.is_rogerReport())
@@ -10735,7 +10902,7 @@ bool MainWindow::canAddOtherMsg(DecodedText decodedText)
                 .arg(decodedText.is_rogerExch()));
 
   //                                                        for setting option labels
-  return ui->cbAddOther->isChecked() and (
+  return ui->cbAddOther->isVisible() and ui->cbAddOther->isChecked() and (
     //to-do: add contests
     (m_config.special_op_id() == SpecOp::FIELD_DAY and (decodedText.is_exch() or decodedText.is_rogerExch()))
     or (m_config.special_op_id() == SpecOp::NONE and (decodedText.is_reply() or decodedText.is_report()or decodedText.is_rogerReport() or decodedText.is_rogers()))
@@ -10791,8 +10958,8 @@ void MainWindow::updateAutoButton()
 
 void MainWindow::updateAdd73orRR73()
 {
-  ui->cbAdd73orRR73->setEnabled(!ui->cbAddOther->isChecked());
-  if (ui->cbAddOther->isChecked()) ui->cbAdd73orRR73->setChecked(true);
+  ui->cbAdd73orRR73->setEnabled(!(ui->cbAddOther->isVisible() and ui->cbAddOther->isChecked()));
+  if (ui->cbAddOther->isVisible() and ui->cbAddOther->isChecked()) ui->cbAdd73orRR73->setChecked(true);
 }
 
 void MainWindow::on_cbConfStart_clicked(bool checked)
@@ -10842,23 +11009,23 @@ void MainWindow::clearAllCallInfo()
 void  MainWindow::on_cbLockPeriod_clicked(bool checked)
 {
   debugToFile("cbLockPer tx lock:" + boolToString(checked));
-  updateTxPeriodLock();
+  updateTxPeriodLock(true);
 }
 
-void MainWindow::updateTxPeriodLock()
+void MainWindow::updateTxPeriodLock(bool showMsg)
 {
-  if (ui->cbLockPeriod->isChecked()) {
-    showStatusMessage("Tx period locked");
+  if (ui->cbLockPeriod->isVisible() and ui->cbLockPeriod->isChecked()) {
+    if (showMsg) showStatusMessage("Tx period locked");
     ui->txFirstCheckBox->setText("Tx even/1st, locked");
   } else {
-    showStatusMessage("Tx period unlocked");
+    if (showMsg) showStatusMessage("Tx period unlocked");
     ui->txFirstCheckBox->setText("Tx even/1st");
   }
 }
 
 void MainWindow::updateConfStart()  //FD
 {
-  bool checked = ui->cbConfStart->isChecked();
+  bool checked = ui->cbConfStart->isVisible() and ui->cbConfStart->isChecked();
   ui->addCallButton->setVisible(checked);
   ui->ignoreCallButton->setVisible(checked);
   if (checked) updateAddSkipButtons();
@@ -10917,4 +11084,133 @@ bool MainWindow::isDecodeFromLastPeriod(DecodedText decodedText)
   bool res = age < (3 * m_TRperiod) / 2;
   debugToFile(QString{"isDecodeF decode:%1 ageSec:%2 from last period:%3"}.arg(decodedText.deCall()).arg(age).arg(res));
   return res;
+}
+
+
+
+
+void MainWindow::download (QUrl url) {
+  if (QNetworkAccessManager::Accessible != m_network_manager.networkAccessible ()) {
+    // try and recover network access for QNAM
+    m_network_manager.setNetworkAccessible (QNetworkAccessManager::Accessible);
+  }
+   
+  QNetworkRequest request {url};
+  request.setRawHeader("User-Agent", "WSJT Downloader");
+  request.setOriginatingObject (this);
+
+  // this blocks for a second or two the first time it is used on
+  // Windows - annoying
+  QPointer<QNetworkReply> network_reply;
+  if (!url_valid) {
+    debugToFile("download  url not valid, head");
+    network_reply = m_network_manager.head (request);
+  } else {
+    debugToFile("download  url valid, get");
+    network_reply = m_network_manager.get (request);
+  }
+
+  connect (network_reply, &QNetworkReply::finished, [=]() {
+    reply_finished(network_reply);
+    network_reply->deleteLater();
+    });
+  connect (network_reply, &QNetworkReply::readyRead, [=]() {
+    download_store(network_reply);
+    });
+}
+
+
+
+
+void MainWindow::reply_finished (QPointer<QNetworkReply> reply) {
+  if (!reply) {
+    return;           // we probably deleted it in an earlier call
+  }
+  
+  QUrl redirect_url {reply->attribute (QNetworkRequest::RedirectionTargetAttribute).toUrl ()};
+  
+  if (reply->error () == QNetworkReply::NoError && !redirect_url.isEmpty ()) {
+    debugToFile("reply_fin check redirect");
+    if ("https" == redirect_url.scheme () && !QSslSocket::supportsSsl ()) {
+      MessageBox::information_message (this, (tr ("Network Error - SSL/TLS support not installed, cannot fetch:\n\'%1\'")
+                                            .arg (redirect_url.toDisplayString ())));
+      url_valid = false; // reset
+      Q_EMIT download_finished (false);
+    } else if (++redirect_count < 10) { // maintain sanity
+      // follow redirect
+      debugToFile("reply_fin redirect");
+      download (reply->url ().resolved (redirect_url));
+    } else {
+      MessageBox::information_message (this, (tr ("Network Error - Too many redirects:\n\'%1\'")
+                                            .arg (redirect_url.toDisplayString ())));
+      url_valid = false; // reset
+      Q_EMIT download_finished (false);
+    }
+  } else if (reply->error () != QNetworkReply::NoError) {
+    debugToFile("reply_fin Error");
+    sav_file.cancelWriting ();
+    sav_file.commit ();
+    url_valid = false;     // reset
+    // report errors that are not due to abort
+    if (QNetworkReply::OperationCanceledError != reply->error ()) {
+      MessageBox::information_message (this, (tr ("Network Error:\n%1")
+                                            .arg (reply->errorString ())));
+    }
+    Q_EMIT download_finished (false);
+  } else {   //no error
+    debugToFile("reply_fin reply OK");
+    if (url_valid && !sav_file.commit ()) {
+      MessageBox::information_message (this, (tr ("File System Error - Cannot commit changes to:\n\"%1\"")
+                                            .arg (sav_file.fileName ())));
+      url_valid = false; // reset
+      Q_EMIT download_finished (false);
+    } else {
+      if (!url_valid) {
+        // now get the body content
+        url_valid = true;
+        download (reply->url ().resolved (redirect_url));
+      } else {
+        url_valid = false; // reset
+        debugToFile("reply_fin emit:true");
+        Q_EMIT download_finished (true);
+        debugToFile("reply_fin emitted");
+      }
+    }
+  }
+}
+
+
+
+
+void MainWindow::download_store (QPointer<QNetworkReply> reply) {
+  //debugToFile("dl_store  url_valid:" + boolToStrding(url_valid));
+  if (url_valid) {
+    if (!sav_file.isOpen ()) {
+      // create temporary file in the final location
+      if (!sav_file.open (QSaveFile::WriteOnly)) {
+        download_abort (reply);
+        MessageBox::information_message (this, (tr ("File System Error - Cannot open file:\n\"%1\"\nError(%2): %3")
+                                                .arg (sav_file.fileName ())
+                                                .arg (sav_file.error ())
+                                                .arg (sav_file.errorString ())));
+      }
+    }
+    if (sav_file.write (reply->read (reply->bytesAvailable ())) < 0) {
+      download_abort (reply);
+      MessageBox::information_message (this, (tr ("File System Error - Cannot write to file:\n\"%1\"\nError(%2): %3")
+                                            .arg (sav_file.fileName ())
+                                            .arg (sav_file.error ())
+                                            .arg (sav_file.errorString ())));
+    }
+  }
+}
+
+
+
+
+void MainWindow::download_abort (QPointer<QNetworkReply> reply) {
+  if (reply && reply->isRunning ()) {
+    debugToFile("dl_abort  ");
+    reply->abort ();
+  }
 }
