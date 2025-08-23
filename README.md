@@ -2,7 +2,7 @@
 
 See the release notes at:
 https://github.com/avantol/FT8-GO--Great-Outdoors-/releases/latest
-for information on creating the necessary installation USB stick.
+for the Windows / Linux / Raspberry Pi installation files, information on creating an installation USB stick, and the easy step-by-step Operating Instructions.
 
 What is FT8-GO?
 ===============
@@ -23,6 +23,8 @@ Features:
 - Convenient options for any type of FT8 activity, including selectable message sequences, responding to specific CQs (directed. local, DX).
 
 - Never lose track of a QSO you start, never miss logging slow-responding stations... excellent for fast-paced crowded bands.
+
+- Optionally, call stations again that you have already worked if they haven't QSL'd you at LotW within a month.
 
 - Clear visual indications and audible alerts for all stations not worked yet, matching what you are looking for.
 
