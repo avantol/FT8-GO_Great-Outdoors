@@ -6,6 +6,7 @@
 // - show time since last upload when requesting download
 // - can allow some hashed calls (dbl-clk) if to call is hashed
 // - don't enable 'reply' if already replying to a call to me (in confirm list) just came in
+// - fix "lotw.arrl.org not found" at startup
 //---------------------------------------------------------- MainWindow
 #include "mainwindow.h"
 #include <cinttypes>
@@ -350,6 +351,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   m_prefTxLimit {DEF_MAX_TX_REPEAT},  //avt 4/3/25
   m_incrLogCount {0},     //avt 4/4/25
   m_lastDecodeDisp {},  //avt 4/17/25
+  m_firstLotwDl {false},  //avt 10/19/25
   m_confReplied {false},
   dlQsoReqReply {false},
   dlQslReqReply {false},
@@ -1031,8 +1033,16 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   ui->cbAutoListen->setVisible(false);
   
   //testing# included:
-  debugToFile(QString{"24        data_dir:'%1' writeable_data_dir:'%2'"}.arg(m_config.data_dir().absolutePath()).arg(m_config.writeable_data_dir().absolutePath()));
+  debugToFile(QString{"5         data_dir:'%1' writeable_data_dir:'%2'"}.arg(m_config.data_dir().absolutePath()).arg(m_config.writeable_data_dir().absolutePath()));
   debugToFile("          sslLibVer:" + QSslSocket::sslLibraryVersionString() + " sslLibBuild:" + QSslSocket::sslLibraryBuildVersionString()); 
+
+  //avt 10/23/25 LOTW download ever performed? check for download backup files
+  QStringList filt;
+  filt << QString{"2*"} + QString{FULL_LOG_FNAME};
+  QStringList matchingFiles = m_config.writeable_data_dir().entryList(filt, QDir::Files | QDir::NoDotAndDotDot);
+  m_firstLotwDl = m_firstLotwDl and matchingFiles.isEmpty();
+  debugToFile(QString{"          m_firstLotwDl:%1"}.arg(m_firstLotwDl));
+
   m_enableSound = !m_config.is_dummy_rig();
   
   readPotaCalls();    //avt 8/30/22
@@ -1982,6 +1992,7 @@ void MainWindow::writeSettings()
   m_settings->setValue ("LockPeriod", ui->cbLockPeriod->isChecked());
   m_settings->setValue ("LogEarly", ui->cbLogEarly->isChecked());
   m_settings->setValue ("debugLog", debugLog);    //avt 8/12/25
+  m_settings->setValue ("FirstLotwDl", m_firstLotwDl);    //avt 10/19/25
   m_settings->setValue ("WSPRPreferType1", ui->WSPR_prefer_type_1_check_box->isChecked ());
   m_settings->setValue("UploadSpots",m_uploadSpots);
   m_settings->setValue("NoOwnCall",ui->cbNoOwnCall->isChecked());
@@ -2111,6 +2122,7 @@ void MainWindow::readSettings()
   ui->cbLogEarly->setChecked(m_settings->value("LogEarly",true).toBool());
   
   debugLog = m_settings->value("debugLog",false).toBool();   //avt 8/12/25
+  m_firstLotwDl= m_settings->value("FirstLotwDl",true).toBool();   //avt 10/19/25
 
   ui->WSPR_prefer_type_1_check_box->setChecked (m_settings->value ("WSPRPreferType1", true).toBool ());
   m_uploadSpots=m_settings->value("UploadSpots",false).toBool();
@@ -2702,7 +2714,10 @@ void MainWindow::on_actionSettings_triggered()               //Setup Dialog
     genCQMsg();     //"CQ" type may have changed
     showQueue();
     updateModeCtrls();  //continent may have changed
-    //end
+
+    if (m_incrLogCount and m_config.my_callsign () != callsign) {   //avt 10/19/25
+      MessageBox::information_message (this, "If you are uploading QSOs using WSJT-X's 'Upload to LOTW' feature:\n\nBecause your call sign has changed, it's important to upload your current QSOs now before starting any new QSOs.");
+    }
   }
 }
 
@@ -3367,7 +3382,7 @@ void MainWindow::on_addCallButton_clicked()                       //FD addCallBu
   if (m_pendingCallStack.size()) {
     DecodedText decodedText = m_pendingCallStack.last();
     m_pendingCallStack.removeLast();
-    if (isCorrectPeriod(decodedText)) {
+    //if (isCorrectPeriod(decodedText)) {
       if (!m_msgMap.contains(decodedText.deCall())) {   //could have been added manually
         debugToFile("addCallBu >>> save msg " + decodedText.string().trimmed());
         m_msgMap.insert(decodedText.deCall(), decodedText);
@@ -3409,9 +3424,9 @@ void MainWindow::on_addCallButton_clicked()                       //FD addCallBu
       } else {
         debugToFile("addCallBu hold selected, not processing " + decodedText.deCall());                     
       } 
-    } else {
-      debugToFile("addCallBu not correct tx period, not processing " + decodedText.deCall());
-    }
+    //} else {
+    //  debugToFile("addCallBu not correct tx period, not processing " + decodedText.deCall());
+    //}
   }
   
   updateAddSkipButtons();
@@ -4460,7 +4475,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
                 ) {  
                   if (newcall == m_callInProg || m_callInProg == "" || is_interrupt) { //avt 3/18/25 can start/continue/interrupt QSO
                    decodedtext = decodeInSequence(decodedtext);
-                    if (decodedtext.is_valid() and !addPendingCall(decodedtext)) {
+                    if (decodedtext.is_valid() and (for_us || !addPendingCall(decodedtext))) {  //avt 7/3/26
                       if (isAnyAutoMode()) {
                         debugToFile("readFromS >>> save msg " + decodedtext.string().trimmed());    //avt 9/9/22 save in case interrupted later
                         m_msgMap.insert(newcall, decodedtext);                   //avt 9/9/22
@@ -4542,16 +4557,14 @@ void MainWindow::readFromStdout()                             //readFromStdout
           + " msgProcessed:" + boolToString(msgProcessed)
           + " msgIdx:" + intToString(msgIdx)
         );
-        //avt 3/17/25
-        if (!is_reject && (!is_ignore || (for_us && !isAnyAutoMode())) && (bDisplayRight || (is_wantedDirCq || is_wantedDxLocalCq))) {     //avt 4/4/25 
+        //                                       avt 10/20/25
+        if (!is_reject && (!is_ignore || (for_us /*&& !isAnyAutoMode()*/)) && (bDisplayRight || (is_wantedDirCq || is_wantedDxLocalCq))) {     //avt 10/20/25 
           debugToFile("readFromS decodedtext.string:'" + decodedtext.string() + "'"
             + " m_lastDecodeDisp:'" + m_lastDecodeDisp + "'"
           );
           // This msg is not ignored and not rejected. It may be within 10 hertz of our tuned frequency, 
           // or a JT4 or JT65 avg,
           // or contains MyCall or contains directed CQ from a non-ignored call sign
-          //int nmod = decodedtext0.timeInSeconds () % (2*m_TRperiod);
-          //bool dim = m_txFirst != (nmod != 0);    //true: time period for selected message not OK
           if (decodedtext.string() != m_lastDecodeDisp) {
             debugToFile("readFromS show msg");
             ui->decodedTextBrowser2->displayDecodedText(decodedtext.string(),decodedtext,m_baseCall,m_mode,m_config.DXCC(),
@@ -4573,7 +4586,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
               )
           ) {
             if (m_callInProg != newcall) {
-              if (!addPendingCall(decodedtext)) {
+              if (for_us || !addPendingCall(decodedtext)) {   //avt 7/3/26
                 debugToFile("readFromS >>> save msg " + decodedtext.string().trimmed());
                 m_msgMap.insert(newcall, decodedtext);        //replaces any call that already exists
                 if (m_enableSound and !m_addCallSounded and !m_confCalls.contains(newcall)) {
@@ -7589,8 +7602,6 @@ void MainWindow::displayWidgets(qint64 n)
       ui->sbTxRepeat->setVisible(b);
     }
     if(i==36) {
-      ui->addCallButton->setVisible(b);
-      ui->ignoreCallButton->setVisible(b);
       ui->cbConfStart->setVisible(b);
     }
     //end
@@ -7724,14 +7735,13 @@ void MainWindow::on_actionFT8_triggered()
     }
     on_contest_log_action_triggered();
   } else {    //not special operating activity
-    ui->cbConfStart->setChecked(false);
     if (ui->alertEntry->text() == "FD") ui->alertEntry->setText("");
   }
   updateAutoButton();
   updateAdd73orRR73();
   updateModeCtrls();
-  updateConfStart();
   statusChanged();
+  QTimer::singleShot (100, [=] { updateConfStart(); });
 }
 
 void MainWindow::on_actionJT65_triggered()
@@ -9892,17 +9902,36 @@ void MainWindow::on_actionErase_reference_spectrum_triggered()
 
 void MainWindow::on_actionDownload_from_LOTW_triggered()
 {
-  if (!m_config.lotw_pwd().size() || !m_config.my_callsign().size()) {
-    MessageBox::information_message (this, tr ("Call sign and LOTW password are required.\n\nEnter these in Settings at the General tab."));
-    return;
-  }
-
   if (!m_logbookRead or upLotw != nullptr) {
     showStatusMessage("Wait for the logbook to finish updating...");
     last_tx_label.setText("Waiting for logbook...");
     return;
   }
   
+  //avt 10/19/25
+  QString logFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + FULL_LOG_FNAME;
+  if (m_firstLotwDl and QFile::exists(logFilePathName)) {
+    if (MessageBox::No == MessageBox::query_message (this,
+      QString {"This is your first request to download your complete QSO history from LOTW by WSJT-X.\n\n"} +
+      QString {"IMPORTANT!!! Before continuing:\n"} +
+      QString {"- Be sure you have already uploaded your current QSOs to LOTW, by whatever method you previously used (manually with TQSL and wsjt_log.adi, or automatically with a separate logging program).\n"} +
+      QString {"- Allow enough time after this upload for LOTW to process it.\n\n"} +
+      QString {"Note: All QSO activity is archived in the 'WSJT-X log directory', which is accessible from the File menu.\n\n"} +
+      QString {"Are you ready to continue with downloading QSOs from LOTW?"})) return;
+
+    //backup log file
+    QString savFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + QDateTime::currentDateTimeUtc().toString("yyMMdd_hhmmss").toLocal8Bit() + "_INITIAL_" + FULL_LOG_FNAME;
+    QFile::copy(logFilePathName, savFilePathName);
+    debugToFile("actionDow copied " + logFilePathName + " to " + savFilePathName);      
+  }
+
+  m_firstLotwDl = false;
+
+  if (!m_config.lotw_pwd().size() || !m_config.my_callsign().size()) {
+    MessageBox::information_message (this, tr ("Call sign and LOTW password are required.\n\nEnter these in Settings at the General tab."));
+    return;
+  }
+
   QString adiFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + INCR_LOG_FNAME;
   debugToFile("actionDow adiFilePathName:" + adiFilePathName);
   QFile af{adiFilePathName};
@@ -9911,6 +9940,17 @@ void MainWindow::on_actionDownload_from_LOTW_triggered()
     updateModeCtrls();
     return;
   }
+
+  //avt 10/19/25
+  //cancel current QSO and disable Tx
+  //to prevent logging a QSO into logbook that will be overwritten
+  QString cur = ui->dxCallEntry->text().size() ? "cancel the current QSO and " : "";
+  if ((ui->autoButton->isChecked()) and MessageBox::No == MessageBox::query_message (this,
+      QString{"OK to %1disable Tx while downloading QSOs?"}.arg(cur))) return;
+
+  m_nextCall="";  //avt 10/19/25
+  on_stopTxButton_clicked();
+  abortQSO();
 
   //remove previously-downloaded LOTW file
   QString tmpFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + TEMP_LOG_FNAME;
@@ -10164,6 +10204,17 @@ void MainWindow::on_actionUpload_to_LOTW_triggered()
     return;
   }
   
+  //avt 10/19/25
+  //cancel current QSO and disable Tx
+  //to prevent logging a QSO into logbook that will be overwritten
+  QString cur = ui->dxCallEntry->text().size() ? "cancel the current QSO and " : "";
+  if ((ui->autoButton->isChecked()) and MessageBox::No == MessageBox::query_message (this,
+      QString{"OK to %1disable Tx while uploading QSOs?"}.arg(cur))) return;
+
+  m_nextCall="";  //avt 10/19/25
+  on_stopTxButton_clicked();
+  abortQSO();
+
   last_tx_label.setText(tr ("Starting TQSL..."));
 
   //make a copy of the lotw.adi file in case it changes
@@ -10255,7 +10306,10 @@ void MainWindow::uploadLotwFinished(int exitCode, QProcess::ExitStatus exitStatu
     lines[0] = "";
     sIdx = 1;
   }
+
+  bool signingError = false;   //avt 10/19/25
   for (int i = sIdx; i < lines.size(); i++) {
+    if (lines[i].contains("Error:")) signingError = true;   //avt 10/19/25
     debugToFile("upldFin   " + lines[i]);
   }
   
@@ -10263,9 +10317,13 @@ void MainWindow::uploadLotwFinished(int exitCode, QProcess::ExitStatus exitStatu
     debugToFile("upldFin   tqsl cancelled");
   } else if (exitCode == 11) {
     MessageBox::information_message (this, "Upload to LOTW failed.\n\nCheck internet connection.");
-  } else if (exitCode != 8 and exitCode != 9 and exitCode != 0) {
-    MessageBox::information_message (this, "Upload to LOTW failed: " + outStr + "\n\nDetails:\n" + errStr);
-  } else {    //exit code  = 0 (success) or 8/9 (duplicates, empty, or date range mismatch)
+  } else if (signingError or exitCode != 0) {   //avt 10/19/25
+    debugToFile(QString{"upldFin      tqsl failed, signingError:%1"}.arg(signingError));   //avt 10/19/25
+    MessageBox::information_message (this, "Upload to LOTW: TQSL returned warning(s).\n\nDetails: " + errStr 
+      + "\nOpen the file " + QString{INCR_LOG_FNAME}.toUpper()
+      + " and correct the problem (use 'File|Open log directory'), then upload again (or process " 
+      + QString{INCR_LOG_FNAME}.toUpper() + " manually using Trusted QSL, deleting " + QString{INCR_LOG_FNAME}.toUpper() + " when successful)");
+  } else {    //no error
     QString adiFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + INCR_LOG_FNAME;
     QString adiTmpFilePathName = m_config.writeable_data_dir().absolutePath() + "/" + INCR_LOG_TMP_FNAME;
       
@@ -10283,7 +10341,7 @@ void MainWindow::uploadLotwFinished(int exitCode, QProcess::ExitStatus exitStatu
         last_tx_label.setText("Logged: " + intToString(m_loggedCalls.size()) + " / To upload: " + intToString(m_incrLogCount));
       }
     }
-    QString txt = exitCode ? "Duplicate and/or out of date range QSOs were ignored, check TQSL for certificate expirations.\n\n(Some QSOs may have been uploaded successfully to LOTW)" : "Upload to LOTW successful";
+    QString txt = m_incrLogCount > 0 ? "New QSO logged during upload, re-upload to LOTW." : "Upload to LOTW successful";   //avt 10/19/25
     MessageBox::information_message (this, txt);
   }
   
@@ -10730,6 +10788,7 @@ void MainWindow::setIncrLogCount()
     }
     f.close();
     debugToFile(QString{"setIncrLo m_incrLogCount:%1"}.arg(m_incrLogCount));
+    if (!m_incrLogCount) f.remove();    //avt 10/19/25 file is empty, can't process (causes TQSL error)
   }
 }
 

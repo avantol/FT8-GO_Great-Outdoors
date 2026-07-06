@@ -629,6 +629,7 @@ private:
   int     m_prefTxLimit;    //avt 4/3/25
   int     m_incrLogCount;   //avt 4/4/25
   QString m_lastDecodeDisp;   //avt 4/17/25
+  bool    m_firstLotwDl;    //avt 10/19/25
   bool    m_confReplied;
   bool    dlQsoReqReply;
   bool    dlQslReqReply;
