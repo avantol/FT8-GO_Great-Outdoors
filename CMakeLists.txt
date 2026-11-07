@@ -776,7 +776,17 @@ set_property (SOURCE ${all_C_and_CXXSRCS} APPEND PROPERTY OBJECT_DEPENDS ${CMAKE
 
 if (WIN32)
   # generate the OmniRig COM interface source
-  if (OMNIRIG_TYPE_LIB)
+  #
+  # If OmniRig/OmniRig.{h,cpp} exist in the source tree (generated once by
+  # dumpcpp from OmniRig's type library), use them: no dumpcpp and no
+  # installed OmniRig needed, which is what makes cross-compiling (MXE)
+  # possible. Pass -DOMNIRIG_TYPE_LIB=... to regenerate instead.
+  set (OMNIRIG_PREGENERATED_DIR "${PROJECT_SOURCE_DIR}/OmniRig")
+  if (NOT OMNIRIG_TYPE_LIB AND EXISTS "${OMNIRIG_PREGENERATED_DIR}/OmniRig.cpp"
+      AND EXISTS "${OMNIRIG_PREGENERATED_DIR}/OmniRig.h")
+    set (OMNIRIG_USE_PREGENERATED TRUE)
+    message (STATUS "Using pre-generated OmniRig sources in ${OMNIRIG_PREGENERATED_DIR}")
+  elseif (OMNIRIG_TYPE_LIB)
     # CI / headless build (as upstream WSJT-X): type library path given
     # directly (OmniRig.exe embeds it), bypassing the COM registry lookup.
     # Pass -DOMNIRIG_TYPE_LIB=<path-to-OmniRig.exe-or-.tlb>.
@@ -1109,8 +1119,13 @@ qt5_add_resources (wsjtx_RESOURCES_RCC ${CMAKE_BINARY_DIR}/wsjtx.qrc)
 
 # AX COM servers
 if (WIN32)
-  include (QtAxMacros)
-  wrap_ax_server (GENAXSRCS ${AXSERVERSRCS})
+  if (OMNIRIG_USE_PREGENERATED)
+    set (GENAXSRCS "${OMNIRIG_PREGENERATED_DIR}/OmniRig.cpp")
+    include_directories ("${OMNIRIG_PREGENERATED_DIR}")
+  else ()
+    include (QtAxMacros)
+    wrap_ax_server (GENAXSRCS ${AXSERVERSRCS})
+  endif ()
 endif (WIN32)
 
 
