@@ -9,61 +9,60 @@ on:
 
 jobs:
   linux:
-    name: Linux (Ubuntu 24.04)
-    runs-on: ubuntu-24.04
+    # Each target builds inside a container of the system it is packaged
+    # for (see ci/linux-build.sh), then the .deb is test-installed into a
+    # fresh container of the same system.
+    name: Linux ${{ matrix.tag }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: ubuntu-24.04_mint-22.1_lite-7.4_amd64
+            image: ubuntu:24.04
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - tag: ubuntu-16.04_lite-3.4_i386
+            image: i386/ubuntu:16.04
+            platform: linux/386
+            runner: ubuntu-24.04
+          - tag: raspios-12_arm64
+            image: debian:bookworm
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - tag: raspios-12_armhf
+            # 32-bit Pi OS; GitHub's ARM runners can't execute 32-bit ARM,
+            # so this one runs under QEMU emulation (slow).
+            image: arm32v7/debian:bookworm
+            platform: linux/arm/v7
+            runner: ubuntu-24.04
+            qemu: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential gfortran cmake pkg-config \
-            qtbase5-dev qtmultimedia5-dev libqt5serialport5-dev \
-            qttools5-dev qttools5-dev-tools libqt5sql5-sqlite \
-            libboost-dev libfftw3-dev libhamlib-dev libhamlib-utils \
-            libusb-1.0-0-dev libudev-dev dpkg-dev
+      - name: Set up QEMU
+        if: matrix.qemu
+        uses: docker/setup-qemu-action@v4
 
-      - name: Configure
-        # CMAKE_POLICY_VERSION_MINIMUM lets CMake 4.x accept the old
-        # cmake_minimum_required(2.8.10) in CMakeLists.txt.
+      - name: Build, test and package
         run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr \
-            -DWSJT_GENERATE_DOCS=OFF \
-            -DWSJT_SKIP_MANPAGES=ON \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "$PWD":/src -w /src ${{ matrix.image }} \
+            bash ci/linux-build.sh ${{ matrix.tag }}
 
-      - name: Build
-        run: cmake --build build -j"$(nproc)"
-
-      - name: Smoke test (simulate and decode an FT8 signal)
-        working-directory: ${{ runner.temp }}
+      - name: Test-install .deb in a clean container
         run: |
-          "$GITHUB_WORKSPACE/build/ft8sim" "CQ K1ABC FN42" 1500.0 0.0 0.1 1.0 0 1 -12
-          "$GITHUB_WORKSPACE/build/jt9" -8 -d 3 000000_000001.wav | tee decode.txt
-          grep -q "CQ K1ABC FN42" decode.txt
-
-      - name: Build .deb package
-        working-directory: build
-        run: |
-          cpack -G DEB
-          deb=$(ls ft8-go_*.deb)
-          echo "DEB=build/$deb" >> "$GITHUB_ENV"
-          dpkg-deb --info "$deb"
-
-      - name: Test-install .deb
-        run: |
-          sudo apt-get install -y "./$DEB"
-          dpkg -s ft8-go | grep -E '^(Package|Version|Status|Depends):'
-          for f in wsjtx jt9 rigctl-wsjtx rigctld-wsjtx; do test -x "/usr/bin/$f"; done
+          deb=$(ls dist/ft8-go_*_${{ matrix.tag }}.deb)
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "$PWD":/src -w /src ${{ matrix.image }} \
+            bash ci/linux-install-test.sh "$deb"
 
       - name: Upload .deb
         uses: actions/upload-artifact@v7
         with:
-          name: ft8-go-deb-ubuntu-24.04-amd64
-          path: build/ft8-go_*.deb
+          name: ft8-go_${{ matrix.tag }}
+          path: dist/ft8-go_*.deb
           if-no-files-found: error

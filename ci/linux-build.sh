@@ -1,0 +1,53 @@
+#!/bin/bash
+# Build, smoke-test and package FT8-GO as a .deb inside a Debian/Ubuntu
+# container. Used by .github/workflows/build.yml for every Linux target.
+#
+#   ci/linux-build.sh <target-tag>     e.g. ubuntu-16.04_i386
+#
+# Run from the source tree root (as root, in a throwaway container).
+# The finished package is written to ./dist/ft8-go_<version>_<target-tag>.deb
+set -euo pipefail
+
+TAG=${1:?usage: $0 <target-tag>}
+SRC=$(pwd)
+BUILD=$SRC/build-$TAG
+DIST=$SRC/dist
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+  build-essential gfortran cmake pkg-config file dpkg-dev \
+  qtbase5-dev qtmultimedia5-dev libqt5serialport5-dev \
+  qttools5-dev qttools5-dev-tools libqt5sql5-sqlite \
+  libfftw3-dev libhamlib-dev libhamlib-utils \
+  libusb-1.0-0-dev libudev-dev
+
+# CMAKE_POLICY_VERSION_MINIMUM lets CMake 4.x accept the old
+# cmake_minimum_required(2.8.10); older CMake ignores it.
+cmake -S "$SRC" -B "$BUILD" \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr \
+  -DWSJT_GENERATE_DOCS=OFF \
+  -DWSJT_SKIP_MANPAGES=ON \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build "$BUILD" -- -j"$(nproc)"
+
+# Smoke test: simulate an FT8 signal and check jt9 decodes it.
+work=$(mktemp -d)
+(
+  cd "$work"
+  "$BUILD/ft8sim" "CQ K1ABC FN42" 1500.0 0.0 0.1 1.0 0 1 -12
+  "$BUILD/jt9" -8 -d 3 000000_000001.wav | tee decode.txt
+  grep -q "CQ K1ABC FN42" decode.txt
+)
+rm -rf "$work"
+
+# Package.
+(cd "$BUILD" && cpack -G DEB)
+deb=$(ls "$BUILD"/ft8-go_*.deb)
+version=$(dpkg-deb -f "$deb" Version)
+mkdir -p "$DIST"
+out="$DIST/ft8-go_${version}_${TAG}.deb"
+cp "$deb" "$out"
+dpkg-deb --info "$out"
+echo "Built $out"
