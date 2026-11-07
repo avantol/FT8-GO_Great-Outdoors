@@ -912,6 +912,11 @@ endif (NOT APPLE)
 if (WIN32)
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 endif (WIN32)
+# GCC 10+ defaults to -fno-common; wsprd relies on tentative definitions
+# shared between translation units (e.g. 'stack' in wsprd.c / jelinek.c).
+if (CMAKE_C_COMPILER_ID STREQUAL "GNU" AND NOT CMAKE_C_COMPILER_VERSION VERSION_LESS 10)
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fcommon")
+endif ()
 if (APPLE AND ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libc++")
 else ()
@@ -924,6 +929,10 @@ endif ()
 # Fortran setup
 #
 set (General_FFLAGS "-Wall -Wno-conversion -fno-second-underscore")
+# gfortran 10+ turns legacy argument type/rank mismatches into errors.
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU" AND NOT CMAKE_Fortran_COMPILER_VERSION VERSION_LESS 10)
+  set (General_FFLAGS "${General_FFLAGS} -fallow-argument-mismatch")
+endif ()
 
 # FFLAGS depend on the compiler
 get_filename_component (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)

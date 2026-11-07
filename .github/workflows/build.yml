@@ -1,0 +1,57 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gfortran cmake pkg-config \
+            qtbase5-dev qtmultimedia5-dev libqt5serialport5-dev \
+            qttools5-dev qttools5-dev-tools libqt5sql5-sqlite \
+            libboost-dev libfftw3-dev libhamlib-dev \
+            libusb-1.0-0-dev libudev-dev
+
+      - name: Configure
+        # CMAKE_POLICY_VERSION_MINIMUM lets CMake 4.x accept the old
+        # cmake_minimum_required(2.8.10) in CMakeLists.txt.
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Smoke test (simulate and decode an FT8 signal)
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$GITHUB_WORKSPACE/build/ft8sim" "CQ K1ABC FN42" 1500.0 0.0 0.1 1.0 0 1 -12
+          "$GITHUB_WORKSPACE/build/jt9" -8 -d 3 000000_000001.wav | tee decode.txt
+          grep -q "CQ K1ABC FN42" decode.txt
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: ft8-go-linux-x86_64
+          path: |
+            build/wsjtx
+            build/jt9
+            build/wsprd
+          if-no-files-found: error
