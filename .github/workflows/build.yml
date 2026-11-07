@@ -3,9 +3,16 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+env:
+  # Test builds get a distinct, increasing package version (2.0.0-395+ci57)
+  # so each installs as an upgrade; tagged releases (v*) get the plain
+  # version (2.0.0-396), which sorts above every earlier test build.
+  FT8GO_VERSION_SUFFIX: ${{ github.ref_type != 'tag' && format('+ci{0}', github.run_number) || '' }}
 
 jobs:
   linux:
@@ -60,6 +67,7 @@ jobs:
       - name: Build, test and package
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
+            -e FT8GO_VERSION_SUFFIX \
             -v "$PWD":/src -w /src ${{ matrix.image }} \
             bash ci/linux-build.sh ${{ matrix.tag }}
 
@@ -173,6 +181,7 @@ jobs:
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DFT8GO_VERSION_SUFFIX="${FT8GO_VERSION_SUFFIX}" \
             -Wno-dev
 
       - name: Build
@@ -189,7 +198,7 @@ jobs:
         run: |
           build_no=$(grep -oE 'return "[0-9]+";' revision_utils.cpp | grep -oE '[0-9]+')
           cd build
-          cpack -G NSIS -D CPACK_PACKAGE_FILE_NAME="wsjtx-2.0.0-${build_no}-win64"
+          cpack -G NSIS -D CPACK_PACKAGE_FILE_NAME="wsjtx-2.0.0-${build_no}${FT8GO_VERSION_SUFFIX}-win64"
           ls -la *.exe
 
       - name: Upload installer

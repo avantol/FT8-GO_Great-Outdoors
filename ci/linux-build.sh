@@ -4,6 +4,9 @@
 #
 #   ci/linux-build.sh <target-tag>     e.g. ubuntu-16.04_i386
 #
+# Optional: FT8GO_VERSION_SUFFIX (e.g. +ci57) is appended to the package
+# revision for test builds.
+#
 # Run from the source tree root (as root, in a throwaway container).
 # The finished package is written to ./dist/ft8-go_<version>_<target-tag>.deb
 set -euo pipefail
@@ -64,6 +67,7 @@ mkdir -p "$BUILD"
     -DWSJT_GENERATE_DOCS=OFF \
     -DWSJT_SKIP_MANPAGES=ON \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    -DFT8GO_VERSION_SUFFIX="${FT8GO_VERSION_SUFFIX:-}" \
     ${extra_cmake_args[@]+"${extra_cmake_args[@]}"}
 )
 cmake --build "$BUILD" -- -j"$(nproc)"

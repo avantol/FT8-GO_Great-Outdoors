@@ -1719,12 +1719,17 @@ set (CPACK_DEBIAN_PACKAGE_HOMEPAGE "${PROJECT_HOMEPAGE}")
 set (CPACK_DEBIAN_PACKAGE_NAME "ft8-go")
 set (CPACK_DEBIAN_PACKAGE_CONFLICTS "wsjtx")
 set (CPACK_DEBIAN_PACKAGE_REPLACES "wsjtx")
-# Debian revision = FT8-GO build number, e.g. 2.0.0-395
+# Debian revision = FT8-GO build number, e.g. 2.0.0-395, plus an optional
+# suffix that CI sets for test builds (2.0.0-395+ci57). Debian orders
+# 2.0.0-395 < 2.0.0-395+ci57 < 2.0.0-396, so each test build upgrades the
+# previous one and the next release supersedes them all.
+set (FT8GO_VERSION_SUFFIX "" CACHE STRING
+  "Appended to the package revision for test builds, e.g. +ci57")
 file (STRINGS "${PROJECT_SOURCE_DIR}/revision_utils.cpp" _ft8go_build_line
   REGEX "^[ \t]*return \"[0-9]+\";")
 string (REGEX MATCH "[0-9]+" FT8GO_BUILD_NUMBER "${_ft8go_build_line}")
 if (FT8GO_BUILD_NUMBER)
-  set (CPACK_DEBIAN_PACKAGE_RELEASE "${FT8GO_BUILD_NUMBER}")
+  set (CPACK_DEBIAN_PACKAGE_RELEASE "${FT8GO_BUILD_NUMBER}${FT8GO_VERSION_SUFFIX}")
 endif ()
 # Shared-library dependencies (libgfortran, Qt, hamlib, fftw, libc, ...) are
 # computed by dpkg-shlibdeps; list only the runtime plugins it cannot see.
