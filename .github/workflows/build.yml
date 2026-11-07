@@ -89,7 +89,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 120
     env:
-      HAMLIB_VERSION: "4.7.0"
+      HAMLIB_VERSION: "4.7.2"
     defaults:
       run:
         shell: msys2 {0}
@@ -130,6 +130,8 @@ jobs:
 
       - name: Build Hamlib
         if: steps.hamlib-cache.outputs.cache-hit != 'true'
+        # -include assert.h: Hamlib 4.7.x lib/precise_time.c calls assert()
+        # without including <assert.h>, an error with MSYS2's gcc 16.
         run: |
           WORKSPACE=$(cygpath "${GITHUB_WORKSPACE}")
           git clone --depth 1 --branch "${HAMLIB_VERSION}" \
@@ -140,7 +142,7 @@ jobs:
             --prefix="${WORKSPACE}/hamlib-prefix" \
             --enable-shared --disable-static \
             --without-cxx-binding --without-readline \
-            CFLAGS="-DNDEBUG -g -O2 -fdata-sections -ffunction-sections" \
+            CFLAGS="-DNDEBUG -g -O2 -fdata-sections -ffunction-sections -include assert.h" \
             LDFLAGS="-Wl,--gc-sections"
           make -j$(nproc)
           make install-strip
