@@ -2561,7 +2561,7 @@ Right click for insert and delete options.</string>
                  </size>
                 </property>
                 <property name="toolTip">
-                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enter the identifier of the park you are activating, for example 'US-4403'. This wil be used to label the POTA log you will submit to the Parks on the Air website.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enter the identifier of the park you are activating, for example 'US-4403' or 'US-12345'. This will be used to label the POTA log you will submit to the Parks on the Air website.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                 </property>
                 <property name="text">
                  <string>US-1234</string>
