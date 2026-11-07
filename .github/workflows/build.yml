@@ -23,8 +23,8 @@ jobs:
             build-essential gfortran cmake pkg-config \
             qtbase5-dev qtmultimedia5-dev libqt5serialport5-dev \
             qttools5-dev qttools5-dev-tools libqt5sql5-sqlite \
-            libboost-dev libfftw3-dev libhamlib-dev \
-            libusb-1.0-0-dev libudev-dev
+            libboost-dev libfftw3-dev libhamlib-dev libhamlib-utils \
+            libusb-1.0-0-dev libudev-dev dpkg-dev
 
       - name: Configure
         # CMAKE_POLICY_VERSION_MINIMUM lets CMake 4.x accept the old
@@ -32,6 +32,7 @@ jobs:
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -46,12 +47,23 @@ jobs:
           "$GITHUB_WORKSPACE/build/jt9" -8 -d 3 000000_000001.wav | tee decode.txt
           grep -q "CQ K1ABC FN42" decode.txt
 
-      - name: Upload binaries
+      - name: Build .deb package
+        working-directory: build
+        run: |
+          cpack -G DEB
+          deb=$(ls ft8-go_*.deb)
+          echo "DEB=build/$deb" >> "$GITHUB_ENV"
+          dpkg-deb --info "$deb"
+
+      - name: Test-install .deb
+        run: |
+          sudo apt-get install -y "./$DEB"
+          dpkg -s ft8-go | grep -E '^(Package|Version|Status|Depends):'
+          for f in wsjtx jt9 rigctl-wsjtx rigctld-wsjtx; do test -x "/usr/bin/$f"; done
+
+      - name: Upload .deb
         uses: actions/upload-artifact@v7
         with:
-          name: ft8-go-linux-x86_64
-          path: |
-            build/wsjtx
-            build/jt9
-            build/wsprd
+          name: ft8-go-deb-ubuntu-24.04-amd64
+          path: build/ft8-go_*.deb
           if-no-files-found: error

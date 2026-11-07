@@ -1704,7 +1704,23 @@ endif ()
 
 set (CPACK_DEBIAN_PACKAGE_DESCRIPTION "${PROJECT_DESCRIPTION}")
 set (CPACK_DEBIAN_PACKAGE_HOMEPAGE "${PROJECT_HOMEPAGE}")
-set (CPACK_DEBIAN_PACKAGE_DEPENDS "libgfortran3 (>=4.8.2), libqt5serialport5 (>=5.5), libqt5multimedia5-plugins (>=5.5), libqt5widgets5 (>=5.5), libqt5sql5-sqlite (>=5.5), libusb-1.0-0, libudev1, libc6 (>=2.19)")
+# Package as "ft8-go" rather than "wsjtx": Debian's libhamlib4 declares
+# Breaks: wsjtx (<< 2.4.0), which would otherwise force removal of hamlib
+# (and anything depending on it) when FT8-GO is installed. Both packages
+# install /usr/bin/wsjtx, so they still conflict with each other.
+set (CPACK_DEBIAN_PACKAGE_NAME "ft8-go")
+set (CPACK_DEBIAN_PACKAGE_CONFLICTS "wsjtx")
+set (CPACK_DEBIAN_PACKAGE_REPLACES "wsjtx")
+# Debian revision = FT8-GO build number, e.g. 2.0.0-395
+file (STRINGS "${PROJECT_SOURCE_DIR}/revision_utils.cpp" _ft8go_build_line
+  REGEX "^[ \t]*return \"[0-9]+\";")
+string (REGEX MATCH "[0-9]+" FT8GO_BUILD_NUMBER "${_ft8go_build_line}")
+if (FT8GO_BUILD_NUMBER)
+  set (CPACK_DEBIAN_PACKAGE_RELEASE "${FT8GO_BUILD_NUMBER}")
+endif ()
+# Shared-library dependencies (libgfortran, Qt, hamlib, fftw, libc, ...) are
+# computed by dpkg-shlibdeps; list only the runtime plugins it cannot see.
+set (CPACK_DEBIAN_PACKAGE_DEPENDS "libqt5multimedia5-plugins, libqt5sql5-sqlite")
 set (CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 set (CPACK_RPM_PACKAGE_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
