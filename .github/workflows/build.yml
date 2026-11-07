@@ -27,6 +27,9 @@ jobs:
             image: i386/ubuntu:16.04
             platform: linux/386
             runner: ubuntu-24.04
+            # Ubuntu 16.04's hamlib (1.2.15) is too old: build Hamlib from
+            # source and link it statically, like the original Lite 3.4 .deb.
+            hamlib_src: "4.6.5"
           - tag: raspios-12_arm64
             image: debian:bookworm
             platform: linux/arm64
@@ -46,6 +49,13 @@ jobs:
       - name: Set up QEMU
         if: matrix.qemu
         uses: docker/setup-qemu-action@v4
+
+      - name: Download Hamlib source
+        if: matrix.hamlib_src
+        run: |
+          v=${{ matrix.hamlib_src }}
+          curl -fsSL -o "hamlib-$v.tar.gz" \
+            "https://github.com/Hamlib/Hamlib/releases/download/$v/hamlib-$v.tar.gz"
 
       - name: Build, test and package
         run: |
@@ -71,6 +81,10 @@ jobs:
     # Modelled on upstream WSJT-X .github/workflows/build-windows.yml:
     # MSYS2 MINGW64 toolchain, Hamlib built from source (cached), OmniRig
     # installed on the runner so dumpcpp can read its type library.
+    # MINGW64 (msvcrt) rather than UCRT64 for the best chance of running on
+    # Windows 7. MSYS2 no longer builds libusb for MINGW64, so Hamlib is
+    # built without it (only USB-only devices such as FUNcube are lost; the
+    # original FT8-GO win64 release has no libusb either).
     name: Windows x64
     runs-on: windows-latest
     timeout-minutes: 120
@@ -105,7 +119,6 @@ jobs:
             mingw-w64-x86_64-qt5-tools
             mingw-w64-x86_64-qt5-activeqt
             mingw-w64-x86_64-fftw
-            mingw-w64-x86_64-libusb
             mingw-w64-x86_64-nsis
 
       - name: Cache Hamlib

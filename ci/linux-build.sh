@@ -13,14 +13,44 @@ SRC=$(pwd)
 BUILD=$SRC/build-$TAG
 DIST=$SRC/dist
 
+# If a Hamlib source tarball has been placed in the source tree (done by
+# the workflow for systems whose packaged Hamlib is too old, e.g. Ubuntu
+# 16.04 ships 1.2.15), build it and link it statically instead of using
+# the system package.
+HAMLIB_TARBALL=$(ls "$SRC"/hamlib-*.tar.gz 2>/dev/null | head -1 || true)
+if [ -n "$HAMLIB_TARBALL" ]; then
+  hamlib_pkgs=""
+else
+  hamlib_pkgs="libhamlib-dev libhamlib-utils"
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   build-essential gfortran cmake pkg-config file dpkg-dev \
   qtbase5-dev qtmultimedia5-dev libqt5serialport5-dev \
   qttools5-dev qttools5-dev-tools libqt5sql5-sqlite \
-  libfftw3-dev libhamlib-dev libhamlib-utils \
+  libfftw3-dev $hamlib_pkgs \
   libusb-1.0-0-dev libudev-dev
+
+extra_cmake_args=()
+if [ -n "$HAMLIB_TARBALL" ]; then
+  hl_build=$(mktemp -d)
+  tar -xzf "$HAMLIB_TARBALL" -C "$hl_build" --strip-components=1
+  (
+    cd "$hl_build"
+    ./configure --prefix=/usr/local \
+      --disable-shared --enable-static \
+      --without-cxx-binding --without-readline
+    make -j"$(nproc)"
+    make install
+  )
+  rm -rf "$hl_build"
+  # Static libhamlib.a needs its private dependencies on every link line.
+  extra_cmake_args+=(
+    "-DCMAKE_CXX_STANDARD_LIBRARIES=$(pkg-config --static --libs-only-l --libs-only-other hamlib | sed 's/-lhamlib//')"
+  )
+fi
 
 # CMAKE_POLICY_VERSION_MINIMUM lets CMake 4.x accept the old
 # cmake_minimum_required(2.8.10); older CMake ignores it.
@@ -33,7 +63,8 @@ mkdir -p "$BUILD"
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DWSJT_GENERATE_DOCS=OFF \
     -DWSJT_SKIP_MANPAGES=ON \
-    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    ${extra_cmake_args[@]+"${extra_cmake_args[@]}"}
 )
 cmake --build "$BUILD" -- -j"$(nproc)"
 
