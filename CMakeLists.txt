@@ -776,21 +776,30 @@ set_property (SOURCE ${all_C_and_CXXSRCS} APPEND PROPERTY OBJECT_DEPENDS ${CMAKE
 
 if (WIN32)
   # generate the OmniRig COM interface source
-  find_program (DUMPCPP dumpcpp)
-  if (DUMPCPP-NOTFOUND)
-    message (FATAL_ERROR "dumpcpp tool not found")
-  endif (DUMPCPP-NOTFOUND)
-  execute_process (
-    COMMAND ${DUMPCPP} -getfile {4FE359C5-A58F-459D-BE95-CA559FB4F270}
-    OUTPUT_VARIABLE AXSERVER
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-  string (STRIP "${AXSERVER}" AXSERVER)
-  if (NOT AXSERVER)
-    message (FATAL_ERROR "You need to install OmniRig on this computer")
-  endif (NOT AXSERVER)
-  string (REPLACE "\"" "" AXSERVER ${AXSERVER})
-  file (TO_CMAKE_PATH ${AXSERVER} AXSERVERSRCS)
+  if (OMNIRIG_TYPE_LIB)
+    # CI / headless build (as upstream WSJT-X): type library path given
+    # directly (OmniRig.exe embeds it), bypassing the COM registry lookup.
+    # Pass -DOMNIRIG_TYPE_LIB=<path-to-OmniRig.exe-or-.tlb>.
+    file (TO_CMAKE_PATH "${OMNIRIG_TYPE_LIB}" AXSERVERSRCS)
+    message (STATUS "Using OmniRig type library: ${AXSERVERSRCS}")
+  else ()
+    # Normal local build: query the COM registry for the type library.
+    find_program (DUMPCPP dumpcpp)
+    if (DUMPCPP-NOTFOUND)
+      message (FATAL_ERROR "dumpcpp tool not found")
+    endif (DUMPCPP-NOTFOUND)
+    execute_process (
+      COMMAND ${DUMPCPP} -getfile {4FE359C5-A58F-459D-BE95-CA559FB4F270}
+      OUTPUT_VARIABLE AXSERVER
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
+    string (STRIP "${AXSERVER}" AXSERVER)
+    if (NOT AXSERVER)
+      message (FATAL_ERROR "You need to install OmniRig on this computer, or pass -DOMNIRIG_TYPE_LIB=<path>")
+    endif (NOT AXSERVER)
+    string (REPLACE "\"" "" AXSERVER ${AXSERVER})
+    file (TO_CMAKE_PATH ${AXSERVER} AXSERVERSRCS)
+  endif ()
 endif (WIN32)
 
 

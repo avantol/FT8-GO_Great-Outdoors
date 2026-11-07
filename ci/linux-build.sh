@@ -24,12 +24,17 @@ apt-get install -y --no-install-recommends \
 
 # CMAKE_POLICY_VERSION_MINIMUM lets CMake 4.x accept the old
 # cmake_minimum_required(2.8.10); older CMake ignores it.
-cmake -S "$SRC" -B "$BUILD" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/usr \
-  -DWSJT_GENERATE_DOCS=OFF \
-  -DWSJT_SKIP_MANPAGES=ON \
-  -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+# (No -S/-B: Ubuntu 16.04 ships CMake 3.5, which predates them.)
+mkdir -p "$BUILD"
+(
+  cd "$BUILD"
+  cmake "$SRC" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DWSJT_GENERATE_DOCS=OFF \
+    -DWSJT_SKIP_MANPAGES=ON \
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+)
 cmake --build "$BUILD" -- -j"$(nproc)"
 
 # Smoke test: simulate an FT8 signal and check jt9 decodes it.
