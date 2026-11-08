@@ -3,13 +3,16 @@ subroutine multimode_decoder(ss,id2,params,nfsample)
   !$ use omp_lib
   use prog_args
   use timer_module, only: timer
+  use timer_impl, only: timer_get_state, timer_set_state
   use jt4_decode
   use jt65_decode
   use jt9_decode
   use ft8_decode
 
   include 'jt9com.f90'
-  include 'timer_common.inc'
+
+  ! timer nesting state handed to the threads of the parallel sections below
+  integer :: tlevel, tonlevel(0:10)
 
   type, extends(jt4_decoder) :: counting_jt4_decoder
      integer :: decoded
@@ -200,9 +203,13 @@ subroutine multimode_decoder(ss,id2,params,nfsample)
   newdat9=params%newdat
 
 !$call omp_set_dynamic(.true.)
-!$omp parallel sections num_threads(2) copyin(/timer_private/) shared(ndecoded) if(.true.) !iif() needed on Mac
+! Each thread starts with this thread's timer state (what copyin of the
+! timer's threadprivate state used to do; see timer_impl.f90).
+  call timer_get_state(tlevel, tonlevel)
+!$omp parallel sections num_threads(2) shared(ndecoded,tlevel,tonlevel) if(.true.) !iif() needed on Mac
 
 !$omp section
+  call timer_set_state(tlevel, tonlevel)
   if(params%nmode.eq.65 .or. params%nmode.eq.164 .or.                      &
        (params%nmode.eq.(65+9) .and. params%ntxmode.eq.65)) then
 ! We're in JT65 or QRA64 mode, or should do JT65 first
@@ -231,6 +238,7 @@ subroutine multimode_decoder(ss,id2,params,nfsample)
   endif
 
 !$omp section
+  call timer_set_state(tlevel, tonlevel)
   if(params%nmode.eq.(65+9)) then       !Do the other mode (we're in dual mode)
      if (params%ntxmode.eq.9) then
         if(newdat65) dd(1:npts65)=id2(1:npts65)
