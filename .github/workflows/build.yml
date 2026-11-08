@@ -198,6 +198,8 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends nsis p7zip-full
 
       - name: Configure
+        # Boost_INCLUDE_DIR: the bundled boost/ is in the source tree, which
+        # the cross toolchain's find root (the MXE sysroot) doesn't search.
         run: |
           export PATH="$MXE_DIR/usr/bin:$PATH"
           "$TARGET-cmake" -S . -B build \
@@ -207,6 +209,7 @@ jobs:
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DFT8GO_VERSION_SUFFIX="${FT8GO_VERSION_SUFFIX}" \
             -DRIGCTL_EXE="$MXE_DIR/usr/$TARGET/bin/rigctl.exe" \
+            -DBoost_INCLUDE_DIR="$PWD/boost" \
             -DRIGCTLD_EXE="$MXE_DIR/usr/$TARGET/bin/rigctld.exe" \
             -Wno-dev
 
