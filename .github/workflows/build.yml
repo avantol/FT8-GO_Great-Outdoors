@@ -21,12 +21,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Test builds get a distinct, increasing package version (2.0.0-395+ci57)
-  # so each installs as an upgrade; tagged releases (v*) get the plain
-  # version (2.0.0-396), which sorts above every earlier test build.
-  FT8GO_VERSION_SUFFIX: ${{ github.ref_type != 'tag' && format('+ci{0}', github.run_number) || '' }}
-
 jobs:
   linux:
     # Each target builds inside a container of the system it is packaged
@@ -86,7 +80,6 @@ jobs:
         if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            -e FT8GO_VERSION_SUFFIX \
             -v "$PWD":/src -w /src ${{ matrix.image }} \
             bash ci/linux-build.sh ${{ matrix.tag }}
 
@@ -207,7 +200,6 @@ jobs:
             -DWSJT_GENERATE_DOCS=OFF \
             -DWSJT_SKIP_MANPAGES=ON \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-            -DFT8GO_VERSION_SUFFIX="${FT8GO_VERSION_SUFFIX}" \
             -DRIGCTL_EXE="$MXE_DIR/usr/$TARGET/bin/rigctl.exe" \
             -DBoost_INCLUDE_DIR="$PWD/boost" \
             -DRIGCTLD_EXE="$MXE_DIR/usr/$TARGET/bin/rigctld.exe" \
@@ -227,7 +219,7 @@ jobs:
           # MXE's toolchain points CPack at its own <target>-makensis, which we
           # don't build; use Ubuntu's NSIS instead.
           cpack -G NSIS -D CPACK_NSIS_EXECUTABLE=/usr/bin/makensis \
-            -D CPACK_PACKAGE_FILE_NAME="wsjtx-2.0.0-${build_no}${FT8GO_VERSION_SUFFIX}-${{ matrix.installer }}"
+            -D CPACK_PACKAGE_FILE_NAME="wsjtx-2.0.0-${build_no}-${{ matrix.installer }}"
           ls -la *.exe
 
       - name: Check Windows 7 compatibility

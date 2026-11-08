@@ -1762,7 +1762,7 @@ set (CPACK_DEBIAN_PACKAGE_NAME "ft8-go")
 set (CPACK_DEBIAN_PACKAGE_CONFLICTS "wsjtx")
 set (CPACK_DEBIAN_PACKAGE_REPLACES "wsjtx")
 # Debian revision = FT8-GO build number, e.g. 2.0.0-395, plus an optional
-# suffix that CI sets for test builds (2.0.0-395+ci57). Debian orders
+# suffix for local test builds (e.g. 2.0.0-395+ci57; CI no longer sets one). Debian orders
 # 2.0.0-395 < 2.0.0-395+ci57 < 2.0.0-396, so each test build upgrades the
 # previous one and the next release supersedes them all.
 set (FT8GO_VERSION_SUFFIX "" CACHE STRING
