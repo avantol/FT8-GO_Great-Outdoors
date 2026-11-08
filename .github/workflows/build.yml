@@ -1,0 +1,244 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore: ['**.md']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: Which builds to run
+        type: choice
+        options: [all, linux, windows]
+        default: all
+
+# A new push to the same branch/PR cancels its still-running build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Test builds get a distinct, increasing package version (2.0.0-395+ci57)
+  # so each installs as an upgrade; tagged releases (v*) get the plain
+  # version (2.0.0-396), which sorts above every earlier test build.
+  FT8GO_VERSION_SUFFIX: ${{ github.ref_type != 'tag' && format('+ci{0}', github.run_number) || '' }}
+
+jobs:
+  linux:
+    # Each target builds inside a container of the system it is packaged
+    # for (see ci/linux-build.sh), then the .deb is test-installed into a
+    # fresh container of the same system.
+    if: github.event_name != 'workflow_dispatch' || inputs.targets != 'windows'
+    name: Linux ${{ matrix.tag }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: ubuntu-24.04_mint-22.1_lite-7.4_amd64
+            image: ubuntu:24.04
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - tag: ubuntu-16.04_lite-3.4_i386
+            image: i386/ubuntu:16.04
+            platform: linux/386
+            runner: ubuntu-24.04
+            # Ubuntu 16.04's hamlib (1.2.15) is too old: build Hamlib from
+            # source and link it statically, like the original Lite 3.4 .deb.
+            hamlib_src: "4.6.5"
+          - tag: raspios-12_arm64
+            image: debian:bookworm
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - tag: raspios-12_armhf
+            # 32-bit Pi OS; GitHub's ARM runners can't execute 32-bit ARM,
+            # so this one runs under QEMU emulation (about an hour). Skipped
+            # on pull requests (arm64 covers ARM there); runs on main, tags
+            # and manual runs.
+            slow: true
+            image: arm32v7/debian:bookworm
+            platform: linux/arm/v7
+            runner: ubuntu-24.04
+            qemu: true
+
+    steps:
+      - name: Checkout
+        if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
+        uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        if: matrix.qemu && github.event_name != 'pull_request'
+        uses: docker/setup-qemu-action@v4
+
+      - name: Download Hamlib source
+        if: matrix.hamlib_src && (!matrix.slow || github.event_name != 'pull_request')
+        run: |
+          v=${{ matrix.hamlib_src }}
+          curl -fsSL -o "hamlib-$v.tar.gz" \
+            "https://github.com/Hamlib/Hamlib/releases/download/$v/hamlib-$v.tar.gz"
+
+      - name: Build, test and package
+        if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
+        run: |
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e FT8GO_VERSION_SUFFIX \
+            -v "$PWD":/src -w /src ${{ matrix.image }} \
+            bash ci/linux-build.sh ${{ matrix.tag }}
+
+      - name: Test-install .deb in a clean container
+        if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
+        run: |
+          deb=$(ls dist/ft8-go_*_${{ matrix.tag }}.deb)
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "$PWD":/src -w /src ${{ matrix.image }} \
+            bash ci/linux-install-test.sh "$deb"
+
+      - name: Upload .deb
+        if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ft8-go_${{ matrix.tag }}
+          path: dist/ft8-go_*.deb
+          if-no-files-found: error
+
+  windows-mxe:
+    if: github.event_name != 'workflow_dispatch' || inputs.targets != 'linux'
+    # Windows installers cross-compiled with MXE (https://mxe.cc) on Linux,
+    # with a pinned toolchain (gcc 14, mingw-w64 msvcrt runtime, Qt 5.15) so
+    # builds are reproducible and stay Windows 7 compatible. The MXE tree
+    # plus Hamlib is built once per architecture (2-3 hours) and cached.
+    name: Windows ${{ matrix.arch }} (MXE)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            target: i686-w64-mingw32.shared
+            installer: win32
+          - arch: x64
+            target: x86_64-w64-mingw32.shared
+            installer: win64
+    env:
+      MXE_DIR: /opt/mxe
+      MXE_COMMIT: bdc0e9e2cf878d64086a6f3b51bc443d4c5ebb9c   # 2026-11-06
+      MXE_PLUGIN_DIRS: plugins/gcc14
+      MXE_PACKAGES: cc qtbase qtmultimedia qtserialport qttools qtactiveqt fftw libusb1
+      HAMLIB_VERSION: "4.6.5"
+      TARGET: ${{ matrix.target }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Restore MXE toolchain
+        id: mxe-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: /opt/mxe
+          key: mxe-${{ matrix.target }}-${{ env.MXE_COMMIT }}-gcc14-hamlib${{ env.HAMLIB_VERSION }}-v1
+
+      - name: Install MXE build requirements
+        if: steps.mxe-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake autopoint bash bison bzip2 flex g++ g++-multilib \
+            gettext git gperf intltool libc6-dev-i386 libgdk-pixbuf-2.0-dev \
+            libltdl-dev libgl-dev libpcre3-dev libssl-dev libtool-bin \
+            libxml-parser-perl lzip make openssl p7zip-full patch perl \
+            python3 python3-mako python3-pkg-resources python-is-python3 \
+            ruby sed sqlite3 unzip wget xz-utils
+
+      - name: Build MXE toolchain and libraries
+        if: steps.mxe-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo mkdir -p "$MXE_DIR" && sudo chown "$USER" "$MXE_DIR"
+          git clone https://github.com/mxe/mxe.git "$MXE_DIR"
+          cd "$MXE_DIR"
+          git checkout "$MXE_COMMIT"
+          make -j2 JOBS=2 MXE_USE_CCACHE= MXE_TARGETS="$TARGET" \
+            MXE_PLUGIN_DIRS="$MXE_PLUGIN_DIRS" $MXE_PACKAGES
+
+      - name: Build Hamlib
+        if: steps.mxe-cache.outputs.cache-hit != 'true'
+        run: |
+          export PATH="$MXE_DIR/usr/bin:$PATH"
+          curl -fsSL -o hamlib.tar.gz \
+            "https://github.com/Hamlib/Hamlib/releases/download/$HAMLIB_VERSION/hamlib-$HAMLIB_VERSION.tar.gz"
+          mkdir hamlib-src && tar -xzf hamlib.tar.gz -C hamlib-src --strip-components=1
+          cd hamlib-src
+          ./configure --host="$TARGET" --prefix="$MXE_DIR/usr/$TARGET" \
+            --enable-shared --disable-static \
+            --without-cxx-binding --without-readline \
+            CFLAGS="-DNDEBUG -O2 -include assert.h"
+          make -j"$(nproc)"
+          make install
+          cd .. && rm -rf hamlib-src hamlib.tar.gz
+
+      - name: Save MXE toolchain
+        if: steps.mxe-cache.outputs.cache-hit != 'true'
+        run: |
+          # keep the cache small: drop downloaded sources and build logs
+          rm -rf "$MXE_DIR/pkg" "$MXE_DIR/log" "$MXE_DIR/tmp-"* "$MXE_DIR/.ccache"
+          du -sh "$MXE_DIR"
+      - uses: actions/cache/save@v5
+        if: steps.mxe-cache.outputs.cache-hit != 'true'
+        with:
+          path: /opt/mxe
+          key: ${{ steps.mxe-cache.outputs.cache-primary-key }}
+
+      - name: Install packaging tools
+        run: sudo apt-get install -y --no-install-recommends nsis p7zip-full
+
+      - name: Configure
+        # Boost_INCLUDE_DIR: the bundled boost/ is in the source tree, which
+        # the cross toolchain's find root (the MXE sysroot) doesn't search.
+        run: |
+          export PATH="$MXE_DIR/usr/bin:$PATH"
+          "$TARGET-cmake" -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWSJT_GENERATE_DOCS=OFF \
+            -DWSJT_SKIP_MANPAGES=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DFT8GO_VERSION_SUFFIX="${FT8GO_VERSION_SUFFIX}" \
+            -DRIGCTL_EXE="$MXE_DIR/usr/$TARGET/bin/rigctl.exe" \
+            -DBoost_INCLUDE_DIR="$PWD/boost" \
+            -DRIGCTLD_EXE="$MXE_DIR/usr/$TARGET/bin/rigctld.exe" \
+            -Wno-dev
+
+      - name: Build
+        # -k: keep going after an error, so one run reports every failure
+        run: |
+          export PATH="$MXE_DIR/usr/bin:$PATH"
+          cmake --build build -j"$(nproc)" -- -k
+
+      - name: Package NSIS installer
+        run: |
+          export PATH="$MXE_DIR/usr/bin:$PATH"
+          build_no=$(grep -oE 'return "[0-9]+";' revision_utils.cpp | grep -oE '[0-9]+')
+          cd build
+          # MXE's toolchain points CPack at its own <target>-makensis, which we
+          # don't build; use Ubuntu's NSIS instead.
+          cpack -G NSIS -D CPACK_NSIS_EXECUTABLE=/usr/bin/makensis \
+            -D CPACK_PACKAGE_FILE_NAME="wsjtx-2.0.0-${build_no}${FT8GO_VERSION_SUFFIX}-${{ matrix.installer }}"
+          ls -la *.exe
+
+      - name: Check Windows 7 compatibility
+        run: |
+          installer=$(ls build/wsjtx-*-${{ matrix.installer }}.exe)
+          7z x -y -oinstaller-contents "$installer" > /dev/null
+          OBJDUMP="$MXE_DIR/usr/bin/$TARGET-objdump" bash ci/check-win7.sh installer-contents
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: ft8-go_windows-${{ matrix.arch }}-mxe
+          path: build/wsjtx-*-${{ matrix.installer }}.exe
+          if-no-files-found: error

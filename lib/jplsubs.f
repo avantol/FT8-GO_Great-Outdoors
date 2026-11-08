@@ -681,6 +681,9 @@ C
 
       SAVE
 
+C     Our SPLIT below, not the Fortran 2023 SPLIT intrinsic (gfortran 16+)
+      EXTERNAL SPLIT
+
       INTEGER OLDMAX
       PARAMETER ( OLDMAX = 400)
       INTEGER NMAX

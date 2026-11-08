@@ -10,15 +10,6 @@
 #include "TransceiverFactory.hpp"
 #include "PollingTransceiver.hpp"
 
-#ifndef WIN32
-extern "C"
-{
-  typedef struct rig RIG;
-  struct rig_caps;
-  typedef int vfo_t;
-}
-#endif
-
 // hamlib transceiver and PTT mostly delegated directly to hamlib Rig class
 class HamlibTransceiver final
   : public PollingTransceiver
