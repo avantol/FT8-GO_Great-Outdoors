@@ -196,7 +196,8 @@ namespace
   int const combo_box_item_enabled (32 | 1);
   int const combo_box_item_disabled (0);
   
-  QRegularExpression park_id_re {"^[A-Za-z]{2}[-][0-9]{4}"};
+  // POTA park ID: two-letter program prefix, dash, 4 or 5 digits (US-4403, US-12345)
+  QRegularExpression park_id_re {"^[A-Za-z]{2}-[0-9]{4,5}$"};
 
 //  QRegExp message_alphabet {"[- A-Za-z0-9+./?]*"};
   QRegularExpression message_alphabet {"[- @A-Za-z0-9+./?#<>]*"};
@@ -1860,7 +1861,7 @@ bool Configuration::impl::validate ()
         }
       ui_->Park_ID->setFocus ();
       MessageBox::critical_message (this, tr ("Invalid Park ID")
-                                    , tr ("You may leave 'Park ID' blank, or input a valid Park ID.\n\nExample: US-4403"));
+                                    , tr ("You may leave 'Park ID' blank, or input a valid Park ID.\n\nExamples: US-4403, US-12345"));
       return false;
     }
     

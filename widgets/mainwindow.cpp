@@ -207,6 +207,20 @@ namespace
   QString boolToString(bool b) {
     return b ? "true" : "false";
   }
+
+  // POTA free-text message "CALL US12345". FT8 free text carries at most
+  // 13 characters, so if call + park ID is too long, drop the program
+  // prefix ("KD2ABC 12345") rather than let the park number be truncated.
+  QString potaFreeText(QString const& call, QString const& parkId)
+  {
+    int const maxFreeText {13};
+    QString msg {QString {"%1 %2"}.arg(call).arg(QString {parkId}.remove('-'))};
+    if (msg.size() > maxFreeText) {
+      QString const number {parkId.section('-', 1)};
+      if (!number.isEmpty()) msg = QString {"%1 %2"}.arg(call).arg(number);
+    }
+    return msg;
+  }
   
   int ms_minute_error ()
   {
@@ -5417,7 +5431,7 @@ void MainWindow::startTx2()
       m_config.setSpecOpPota();
       ui->labDXped->setText("POTA");
       ui->labDXped->setVisible(true);
-      ui->freeTextMsg->setCurrentText(QString{"%1 %2"}.arg(m_config.my_callsign()).arg(m_config.park_id().remove("-")));    //avt 7/25/25
+      ui->freeTextMsg->setCurrentText(potaFreeText(m_config.my_callsign(), m_config.park_id()));    //avt 7/25/25
       debugToFile("startTx2  switching to specOp POTA mode");
       genCQMsg();
       showStatusMessage("Enabling 'POTA special operating activity'");
@@ -7696,7 +7710,7 @@ void MainWindow::on_actionFT8_triggered()
       ui->listenButton->setVisible(true);
       if (m_config.special_op_id() == SpecOp::POTA) {
         m_CQtype = "CQ POTA";
-        ui->freeTextMsg->setCurrentText(QString{"%1 %2"}.arg(m_config.my_callsign()).arg(m_config.park_id().remove("-")));    //avt 7/25/25
+        ui->freeTextMsg->setCurrentText(potaFreeText(m_config.my_callsign(), m_config.park_id()));    //avt 7/25/25
       }
       if (m_config.special_op_id() == SpecOp::POTA or m_config.special_op_id() == SpecOp::FIELD_DAY) {
         ui->labDXped->setVisible(true);
