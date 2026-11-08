@@ -1772,6 +1772,12 @@ file (STRINGS "${PROJECT_SOURCE_DIR}/revision_utils.cpp" _ft8go_build_line
 string (REGEX MATCH "[0-9]+" FT8GO_BUILD_NUMBER "${_ft8go_build_line}")
 if (FT8GO_BUILD_NUMBER)
   set (CPACK_DEBIAN_PACKAGE_RELEASE "${FT8GO_BUILD_NUMBER}${FT8GO_VERSION_SUFFIX}")
+  if (CMAKE_VERSION VERSION_LESS 3.6)
+    # CPack < 3.6 (e.g. Ubuntu 16.04) ignores CPACK_DEBIAN_PACKAGE_RELEASE,
+    # so put the revision into the version itself
+    set (CPACK_DEBIAN_PACKAGE_VERSION
+      "${WSJTX_VERSION_MAJOR}.${WSJTX_VERSION_MINOR}.${WSJTX_VERSION_PATCH}-${CPACK_DEBIAN_PACKAGE_RELEASE}")
+  endif ()
 endif ()
 # Shared-library dependencies (libgfortran, Qt, hamlib, fftw, libc, ...) are
 # computed by dpkg-shlibdeps; list only the runtime plugins it cannot see.
