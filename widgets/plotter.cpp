@@ -726,6 +726,7 @@ void CPlotter::mouseDoubleClickEvent (QMouseEvent * event)
 
 void CPlotter::setNsps(int ntrperiod, int nsps)                    //setNsps
 {
+  if(ntrperiod<=0) return;                // never let the period divisor become 0
   m_TRperiod=ntrperiod;
   m_nsps=nsps;
   m_fftBinWidth=1500.0/2048.0;

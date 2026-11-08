@@ -41,7 +41,7 @@ protected:
 private:
   QSettings * m_settings;
   float m_ave;
-  qint32  m_TRperiod;
+  qint32  m_TRperiod {15};   // FT8 default until set; must never be 0 (divisor)
 
   QScopedPointer<Ui::FastGraph> ui;
 };
