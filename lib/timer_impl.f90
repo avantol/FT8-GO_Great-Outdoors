@@ -18,6 +18,20 @@ module timer_impl
   real :: total,sum,sumf,ut(MAXCALL),ut0(MAXCALL)
   !$ integer :: j,l,m,ntid(MAXCALL)
 
+  ! Per-thread timer nesting state. Formerly the threadprivate COMMON
+  ! /timer_private/ (timer_common.inc); gcc 16 uses native TLS on Windows
+  ! and emits '.tls_common' for a threadprivate COMMON block, which PE/COFF
+  ! cannot represent. Threadprivate module variables don't have that
+  ! problem. They stay private to this module: OpenMP code hands the state
+  ! to the threads of a team with timer_get_state()/timer_set_state()
+  ! (see decoder.f90) rather than copyin(), which would need the
+  ! threadprivate attribute visible through the .mod file, and the OpenMP
+  ! library can pick up the non-OpenMP timer_impl.mod from the build root.
+  integer :: level=0, onlevel(0:10)=0
+  !$omp threadprivate(level, onlevel)
+
+  public :: timer_get_state, timer_set_state
+
   !
   ! C interoperable callback setup
   !
@@ -63,10 +77,10 @@ contains
     ! k=1 (tstop). Accumulates sums of these times in array ut (user time).
     ! Also traces all calls (for debugging purposes) if limtrace.gt.0
     !
-    ! If this is used with OpenMP than the /timer_private/ common
-    ! block must be copyed into each thread of a thread team by using
-    ! the copyin() clause on the !$omp parallel directive that creates
-    ! the team.
+    ! If this is used with OpenMP then the threadprivate level and
+    ! onlevel module variables must be handed to each thread of a
+    ! thread team: call timer_get_state() before the !$omp parallel
+    ! directive and timer_set_state() at the start of each thread's work.
 
     implicit none
 
@@ -77,7 +91,6 @@ contains
     integer :: n,ndiv,ntrace=0
     !$ integer :: tid
     character(len=8) :: tname
-    include 'timer_common.inc'
 
     !$omp critical(timer)
     if(limtrace.lt.0) go to 999
@@ -237,13 +250,24 @@ contains
     return
   end subroutine print_root
 
+  ! Read / set this thread's timer nesting state (for OpenMP thread teams)
+  subroutine timer_get_state (lev, onlev)
+    integer, intent(out) :: lev, onlev(0:10)
+    lev = level
+    onlev = onlevel
+  end subroutine timer_get_state
+
+  subroutine timer_set_state (lev, onlev)
+    integer, intent(in) :: lev, onlev(0:10)
+    level = lev
+    onlevel = onlev
+  end subroutine timer_set_state
+
   subroutine init_timer (filename)
     use, intrinsic :: iso_c_binding, only: c_char
     use timer_module, only: timer
     implicit none
     character(len=*), optional, intent(in) :: filename
-    include 'timer_common.inc'
-    data level/0/, onlevel/11 * 0/
     if (present (filename)) then
        open (newunit=lu, file=filename, status='unknown')
     else

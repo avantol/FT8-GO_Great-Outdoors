@@ -776,7 +776,17 @@ set_property (SOURCE ${all_C_and_CXXSRCS} APPEND PROPERTY OBJECT_DEPENDS ${CMAKE
 
 if (WIN32)
   # generate the OmniRig COM interface source
-  if (OMNIRIG_TYPE_LIB)
+  #
+  # If OmniRig/OmniRig.{h,cpp} exist in the source tree (generated once by
+  # dumpcpp from OmniRig's type library), use them: no dumpcpp and no
+  # installed OmniRig needed, which is what makes cross-compiling (MXE)
+  # possible. Pass -DOMNIRIG_TYPE_LIB=... to regenerate instead.
+  set (OMNIRIG_PREGENERATED_DIR "${PROJECT_SOURCE_DIR}/OmniRig")
+  if (NOT OMNIRIG_TYPE_LIB AND EXISTS "${OMNIRIG_PREGENERATED_DIR}/OmniRig.cpp"
+      AND EXISTS "${OMNIRIG_PREGENERATED_DIR}/OmniRig.h")
+    set (OMNIRIG_USE_PREGENERATED TRUE)
+    message (STATUS "Using pre-generated OmniRig sources in ${OMNIRIG_PREGENERATED_DIR}")
+  elseif (OMNIRIG_TYPE_LIB)
     # CI / headless build (as upstream WSJT-X): type library path given
     # directly (OmniRig.exe embeds it), bypassing the COM registry lookup.
     # Pass -DOMNIRIG_TYPE_LIB=<path-to-OmniRig.exe-or-.tlb>.
@@ -1109,8 +1119,13 @@ qt5_add_resources (wsjtx_RESOURCES_RCC ${CMAKE_BINARY_DIR}/wsjtx.qrc)
 
 # AX COM servers
 if (WIN32)
-  include (QtAxMacros)
-  wrap_ax_server (GENAXSRCS ${AXSERVERSRCS})
+  if (OMNIRIG_USE_PREGENERATED)
+    set (GENAXSRCS "${OMNIRIG_PREGENERATED_DIR}/OmniRig.cpp")
+    include_directories ("${OMNIRIG_PREGENERATED_DIR}")
+  else ()
+    include (QtAxMacros)
+    wrap_ax_server (GENAXSRCS ${AXSERVERSRCS})
+  endif ()
 endif (WIN32)
 
 
@@ -1653,6 +1668,32 @@ if (NOT is_debug_build)
     #list (APPEND fixup_library_dirs ${hamlib_lib_dir})
     list (APPEND fixup_library_dirs ${hamlib_LIBRARY_DIRS})
 
+    if (WIN32 AND CMAKE_CROSSCOMPILING)
+      # Cross-compiled Windows build (e.g. MXE): fixup_bundle can't tell
+      # Windows system DLLs from missing ones off Windows, so bundle the
+      # DLL dependencies with an objdump import scan instead (see
+      # CMake/Modules/CopyWindowsDlls.cmake).
+      if (NOT CMAKE_OBJDUMP)
+        message (FATAL_ERROR "objdump for the target not found (CMAKE_OBJDUMP)")
+      endif ()
+      set (_dll_search_dirs ${QtCore_location})
+      foreach (_root ${CMAKE_FIND_ROOT_PATH})
+        list (APPEND _dll_search_dirs ${_root}/bin ${_root}/lib)
+      endforeach ()
+      install (CODE "
+        set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/Modules \${CMAKE_MODULE_PATH})
+        include (CopyWindowsDlls)
+        # Qt's OpenSSL: imported when Qt is built -openssl-linked, loaded at
+        # run time otherwise; make sure it's bundled either way (HTTPS/LotW)
+        set (copy_windows_dlls_extra \"libssl-*.dll\" \"libcrypto-*.dll\")
+        copy_windows_dlls (
+          \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\"
+          \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${WSJT_PLUGIN_DESTINATION}\"
+          \"${CMAKE_OBJDUMP}\"
+          ${_dll_search_dirs})"
+        #COMPONENT runtime
+        )
+    else ()
     install (CODE "
         get_filename_component (the_path \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${WSJT_PLUGIN_DESTINATION}\" REALPATH)
         file (GLOB_RECURSE QTPLUGINS \"\${the_path}/*${CMAKE_SHARED_LIBRARY_SUFFIX}\")
@@ -1665,6 +1706,7 @@ if (NOT is_debug_build)
         fixup_bundle (\"\${the_exe}\" \"\${QTPLUGINS}\" \"${fixup_library_dirs}\")"
       #COMPONENT runtime
       )
+    endif ()
   endif (APPLE OR WIN32)
 
 endif (NOT is_debug_build)
@@ -1719,12 +1761,17 @@ set (CPACK_DEBIAN_PACKAGE_HOMEPAGE "${PROJECT_HOMEPAGE}")
 set (CPACK_DEBIAN_PACKAGE_NAME "ft8-go")
 set (CPACK_DEBIAN_PACKAGE_CONFLICTS "wsjtx")
 set (CPACK_DEBIAN_PACKAGE_REPLACES "wsjtx")
-# Debian revision = FT8-GO build number, e.g. 2.0.0-395
+# Debian revision = FT8-GO build number, e.g. 2.0.0-395, plus an optional
+# suffix that CI sets for test builds (2.0.0-395+ci57). Debian orders
+# 2.0.0-395 < 2.0.0-395+ci57 < 2.0.0-396, so each test build upgrades the
+# previous one and the next release supersedes them all.
+set (FT8GO_VERSION_SUFFIX "" CACHE STRING
+  "Appended to the package revision for test builds, e.g. +ci57")
 file (STRINGS "${PROJECT_SOURCE_DIR}/revision_utils.cpp" _ft8go_build_line
   REGEX "^[ \t]*return \"[0-9]+\";")
 string (REGEX MATCH "[0-9]+" FT8GO_BUILD_NUMBER "${_ft8go_build_line}")
 if (FT8GO_BUILD_NUMBER)
-  set (CPACK_DEBIAN_PACKAGE_RELEASE "${FT8GO_BUILD_NUMBER}")
+  set (CPACK_DEBIAN_PACKAGE_RELEASE "${FT8GO_BUILD_NUMBER}${FT8GO_VERSION_SUFFIX}")
 endif ()
 # Shared-library dependencies (libgfortran, Qt, hamlib, fftw, libc, ...) are
 # computed by dpkg-shlibdeps; list only the runtime plugins it cannot see.
