@@ -850,7 +850,8 @@ private:
   void subProcessError (QProcess *, QProcess::ProcessError);
   void uploadLotwFinished(int, QProcess::ExitStatus);      //avt 4/1/25
   void replyCallTimeout();
-  void lotwError (QProcess *, QProcess::ProcessError);
+  void lotwError (QProcess::ProcessError);
+  void finishLotwProcess ();   // the one place upLotw is released
   void statusUpdate () const;
   void update_watchdog_label ();
   void on_the_minute ();

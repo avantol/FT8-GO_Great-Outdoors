@@ -201,7 +201,28 @@ private:
   bool exit_flag_;              // false means loop around with new
                                 // configuration
   QActionGroup * configurations_group_;
+
+  // Close the main window so the application loops round with the new
+  // settings. Returns false, with the pending restart cancelled, if the
+  // main window refuses to close (e.g. a LotW upload is running);
+  // otherwise exit_flag_ would stay false and a later normal close would
+  // restart instead of exiting.
+  bool restart (QMainWindow *, RepositionType);
 };
+
+bool MultiSettings::impl::restart (QMainWindow * main_window, RepositionType type)
+{
+  reposition_type_ = type;
+  exit_flag_ = false;
+  if (!main_window->close ())
+    {
+      reposition_type_ = RepositionType::unchanged;
+      exit_flag_ = true;
+      new_settings_.clear ();
+      return false;
+    }
+  return true;
+}
 
 #include "MultiSettings.moc"
 #include "moc_MultiSettings.cpp"
@@ -571,11 +592,15 @@ void MultiSettings::impl::select_configuration (QMainWindow * main_window, QMenu
         if (current_group.size ()) settings_.beginGroup (current_group);
       }
       // and set up the restart
+      auto const previous_name = current_;
       current_ = target_name;
       Q_EMIT parent_->configurationNameChanged (unescape_ampersands (current_));
-      reposition_type_ = RepositionType::save_and_replace;
-      exit_flag_ = false;
-      main_window->close ();
+      if (!restart (main_window, RepositionType::save_and_replace))
+        {
+          // main window refused to close, stay on the current configuration
+          current_ = previous_name;
+          Q_EMIT parent_->configurationNameChanged (unescape_ampersands (current_));
+        }
     }
 }
 
@@ -665,9 +690,7 @@ void MultiSettings::impl::clone_into_configuration (QMainWindow * main_window, Q
           if (target_name == current_)
             {
               // restart with new settings
-              reposition_type_ = RepositionType::replace;
-              exit_flag_ = false;
-              main_window->close ();
+              restart (main_window, RepositionType::replace);
             }
           else
             {
@@ -697,10 +720,8 @@ void MultiSettings::impl::reset_configuration (QMainWindow * main_window, QMenu 
   if (target_name == current_)
     {
       // restart with default settings
-      reposition_type_ = RepositionType::replace;
       new_settings_.clear ();
-      exit_flag_ = false;
-      main_window->close ();
+      restart (main_window, RepositionType::replace);
     }
   else
     {

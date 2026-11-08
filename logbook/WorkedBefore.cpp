@@ -382,8 +382,23 @@ public:
   {
   }
 
+  // The loader thread reads prefixes_ (passed by pointer); it must not be
+  // destroyed while a load is running (large logs take many seconds), e.g.
+  // when the program is closed or the configuration switched mid-load.
+  ~impl ()
+  {
+    async_loader_.waitForFinished ();
+  }
+
   void reload ()
   {
+    // A reload requested while a load is running is deferred until that
+    // load finishes; its result would be stale anyway.
+    if (async_loader_.isRunning ())
+      {
+        reload_pending_ = true;
+        return;
+      }
     async_loader_ = QtConcurrent::run (loader, path_, &prefixes_);
     loader_watcher_.setFuture (async_loader_);
   }
@@ -393,11 +408,20 @@ public:
   QFutureWatcher<worked_before_database_type> loader_watcher_;
   QFuture<worked_before_database_type> async_loader_;
   worked_before_database_type worked_;
+  bool reload_pending_ {false};
 };
 
 WorkedBefore::WorkedBefore ()
 {
   connect (&m_->loader_watcher_, &QFutureWatcher<worked_before_database_type>::finished, [this] () {
+      if (m_->reload_pending_)
+        {
+          // a reload was requested, or a QSO added, during the load: the
+          // result is stale, so load again (the file now has every QSO)
+          m_->reload_pending_ = false;
+          m_->reload ();
+          return;
+        }
       QString error;
       size_t n {0};
       try
@@ -458,6 +482,13 @@ bool WorkedBefore::add (QString const& call
         }
       m_->worked_.emplace (call.toUpper (), grid.left (4).toUpper (), band.toUpper (), mode.toUpper ()
                            , entity.entity_name, entity.continent, entity.CQ_zone, entity.ITU_zone);
+      // If a load is running it may have read the file before this record
+      // was appended, and its result replaces worked_ when it finishes,
+      // which would drop this QSO. Load again once it finishes.
+      if (m_->async_loader_.isRunning ())
+        {
+          m_->reload_pending_ = true;
+        }
     }
   return true;
 }
