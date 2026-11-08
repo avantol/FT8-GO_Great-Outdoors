@@ -214,9 +214,10 @@ jobs:
             -Wno-dev
 
       - name: Build
+        # -k: keep going after an error, so one run reports every failure
         run: |
           export PATH="$MXE_DIR/usr/bin:$PATH"
-          cmake --build build -j"$(nproc)"
+          cmake --build build -j"$(nproc)" -- -k
 
       - name: Package NSIS installer
         run: |
