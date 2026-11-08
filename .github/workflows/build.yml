@@ -224,7 +224,10 @@ jobs:
           export PATH="$MXE_DIR/usr/bin:$PATH"
           build_no=$(grep -oE 'return "[0-9]+";' revision_utils.cpp | grep -oE '[0-9]+')
           cd build
-          cpack -G NSIS -D CPACK_PACKAGE_FILE_NAME="wsjtx-2.0.0-${build_no}${FT8GO_VERSION_SUFFIX}-${{ matrix.installer }}"
+          # MXE's toolchain points CPack at its own <target>-makensis, which we
+          # don't build; use Ubuntu's NSIS instead.
+          cpack -G NSIS -D CPACK_NSIS_EXECUTABLE=/usr/bin/makensis \
+            -D CPACK_PACKAGE_FILE_NAME="wsjtx-2.0.0-${build_no}${FT8GO_VERSION_SUFFIX}-${{ matrix.installer }}"
           ls -la *.exe
 
       - name: Check Windows 7 compatibility
