@@ -1668,6 +1668,32 @@ if (NOT is_debug_build)
     #list (APPEND fixup_library_dirs ${hamlib_lib_dir})
     list (APPEND fixup_library_dirs ${hamlib_LIBRARY_DIRS})
 
+    if (WIN32 AND CMAKE_CROSSCOMPILING)
+      # Cross-compiled Windows build (e.g. MXE): fixup_bundle can't tell
+      # Windows system DLLs from missing ones off Windows, so bundle the
+      # DLL dependencies with an objdump import scan instead (see
+      # CMake/Modules/CopyWindowsDlls.cmake).
+      if (NOT CMAKE_OBJDUMP)
+        message (FATAL_ERROR "objdump for the target not found (CMAKE_OBJDUMP)")
+      endif ()
+      set (_dll_search_dirs ${QtCore_location})
+      foreach (_root ${CMAKE_FIND_ROOT_PATH})
+        list (APPEND _dll_search_dirs ${_root}/bin ${_root}/lib)
+      endforeach ()
+      install (CODE "
+        set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake/Modules \${CMAKE_MODULE_PATH})
+        include (CopyWindowsDlls)
+        # Qt's OpenSSL: imported when Qt is built -openssl-linked, loaded at
+        # run time otherwise; make sure it's bundled either way (HTTPS/LotW)
+        set (copy_windows_dlls_extra \"libssl-*.dll\" \"libcrypto-*.dll\")
+        copy_windows_dlls (
+          \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\"
+          \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${WSJT_PLUGIN_DESTINATION}\"
+          \"${CMAKE_OBJDUMP}\"
+          ${_dll_search_dirs})"
+        #COMPONENT runtime
+        )
+    else ()
     install (CODE "
         get_filename_component (the_path \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${WSJT_PLUGIN_DESTINATION}\" REALPATH)
         file (GLOB_RECURSE QTPLUGINS \"\${the_path}/*${CMAKE_SHARED_LIBRARY_SUFFIX}\")
@@ -1680,6 +1706,7 @@ if (NOT is_debug_build)
         fixup_bundle (\"\${the_exe}\" \"\${QTPLUGINS}\" \"${fixup_library_dirs}\")"
       #COMPONENT runtime
       )
+    endif ()
   endif (APPLE OR WIN32)
 
 endif (NOT is_debug_build)
