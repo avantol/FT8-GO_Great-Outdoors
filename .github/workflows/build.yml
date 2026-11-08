@@ -4,9 +4,22 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths-ignore: ['**.md']
   pull_request:
     branches: [main]
+    paths-ignore: ['**.md']
   workflow_dispatch:
+    inputs:
+      targets:
+        description: Which builds to run
+        type: choice
+        options: [all, linux, windows]
+        default: all
+
+# A new push to the same branch/PR cancels its still-running build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   # Test builds get a distinct, increasing package version (2.0.0-395+ci57)
@@ -19,6 +32,7 @@ jobs:
     # Each target builds inside a container of the system it is packaged
     # for (see ci/linux-build.sh), then the .deb is test-installed into a
     # fresh container of the same system.
+    if: github.event_name != 'workflow_dispatch' || inputs.targets != 'windows'
     name: Linux ${{ matrix.tag }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
@@ -43,7 +57,10 @@ jobs:
             runner: ubuntu-24.04-arm
           - tag: raspios-12_armhf
             # 32-bit Pi OS; GitHub's ARM runners can't execute 32-bit ARM,
-            # so this one runs under QEMU emulation (slow).
+            # so this one runs under QEMU emulation (about an hour). Skipped
+            # on pull requests (arm64 covers ARM there); runs on main, tags
+            # and manual runs.
+            slow: true
             image: arm32v7/debian:bookworm
             platform: linux/arm/v7
             runner: ubuntu-24.04
@@ -51,20 +68,22 @@ jobs:
 
     steps:
       - name: Checkout
+        if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
         uses: actions/checkout@v7
 
       - name: Set up QEMU
-        if: matrix.qemu
+        if: matrix.qemu && github.event_name != 'pull_request'
         uses: docker/setup-qemu-action@v4
 
       - name: Download Hamlib source
-        if: matrix.hamlib_src
+        if: matrix.hamlib_src && (!matrix.slow || github.event_name != 'pull_request')
         run: |
           v=${{ matrix.hamlib_src }}
           curl -fsSL -o "hamlib-$v.tar.gz" \
             "https://github.com/Hamlib/Hamlib/releases/download/$v/hamlib-$v.tar.gz"
 
       - name: Build, test and package
+        if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
             -e FT8GO_VERSION_SUFFIX \
@@ -72,6 +91,7 @@ jobs:
             bash ci/linux-build.sh ${{ matrix.tag }}
 
       - name: Test-install .deb in a clean container
+        if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
         run: |
           deb=$(ls dist/ft8-go_*_${{ matrix.tag }}.deb)
           docker run --rm --platform ${{ matrix.platform }} \
@@ -79,6 +99,7 @@ jobs:
             bash ci/linux-install-test.sh "$deb"
 
       - name: Upload .deb
+        if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v7
         with:
           name: ft8-go_${{ matrix.tag }}
@@ -86,6 +107,7 @@ jobs:
           if-no-files-found: error
 
   windows-mxe:
+    if: github.event_name != 'workflow_dispatch' || inputs.targets != 'linux'
     # Windows installers cross-compiled with MXE (https://mxe.cc) on Linux,
     # with a pinned toolchain (gcc 14, mingw-w64 msvcrt runtime, Qt 5.15) so
     # builds are reproducible and stay Windows 7 compatible. The MXE tree
