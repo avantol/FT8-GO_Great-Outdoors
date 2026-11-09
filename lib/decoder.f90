@@ -80,7 +80,12 @@ subroutine multimode_decoder(ss,id2,params,nfsample)
 
   if(params%nmode.eq.8) then
 ! We're in FT8 mode
-     
+! Set ncontest for this decode before using it: it used to be set only
+! after the Fox-mode open below, so on the first decode after switching
+! to Fox mode houndcallers.txt wasn't opened but unit 19 was still
+! written, which made gfortran create a stray fort.19 file.
+     ncontest=iand(params%nexp_decode,7)
+
      if(ncontest.eq.5) then
 ! Fox mode: initialize and open houndcallers.txt     
         inquire(file=trim(temp_dir)//'/houndcallers.txt',exist=ex)
@@ -98,7 +103,6 @@ subroutine multimode_decoder(ss,id2,params,nfsample)
 
      call timer('decft8  ',0)
      newdat=params%newdat
-     ncontest=iand(params%nexp_decode,7)
      call my_ft8%decode(ft8_decoded,id2,params%nQSOProgress,params%nfqso,    &
           params%nftx,newdat,params%nutc,params%nfa,params%nfb,              &
           params%ndepth,ncontest,logical(params%nagain),                     &
