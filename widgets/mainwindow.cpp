@@ -4925,7 +4925,7 @@ void MainWindow::guiUpdate()
         auto const& message = tr ("Please choose another Tx frequency."
                                   " WSJT-X will not knowingly transmit another"
                                   " mode in the WSPR sub-band on 30m.");
-        QTimer::singleShot (0, [=] { // don't block guiUpdate
+        QTimer::singleShot (0, this, [=] { // don't block guiUpdate
             MessageBox::warning_message (this, tr ("WSPR Guard Band"), message);
           });
       }
@@ -7755,7 +7755,7 @@ void MainWindow::on_actionFT8_triggered()
   updateAdd73orRR73();
   updateModeCtrls();
   statusChanged();
-  QTimer::singleShot (100, [=] { updateConfStart(); });
+  QTimer::singleShot (100, this, [=] { updateConfStart(); });
 }
 
 void MainWindow::on_actionJT65_triggered()
@@ -9989,6 +9989,14 @@ void MainWindow::on_actionDownload_from_LOTW_triggered()
       .arg(startDate);
   debugToFile("actionDow url:" + url);
   current_url = QUrl(url);
+  // Route download_finished to this handler only. Connecting on every
+  // download used to stack up duplicate connections (the 'duplicate calls'
+  // the ReqReply flags work around), and left the other handler connected
+  // too, so a later QSO download could also trigger the QSL merge early.
+  // (A connection made while download_finished is being emitted, as
+  // downloadQslOnly() does from downloadQsoComplete(), is not called for
+  // that emission.)
+  disconnect(this, &MainWindow::download_finished, this, nullptr);
   connect(this, &MainWindow::download_finished, this, &MainWindow::downloadQsoComplete);
   download(current_url);
 
@@ -10084,6 +10092,14 @@ void MainWindow::downloadQslOnly()
       .arg(endDate);
   debugToFile("dlQslOnly url:" + url);
   current_url = QUrl(url);
+  // Route download_finished to this handler only. Connecting on every
+  // download used to stack up duplicate connections (the 'duplicate calls'
+  // the ReqReply flags work around), and left the other handler connected
+  // too, so a later QSO download could also trigger the QSL merge early.
+  // (A connection made while download_finished is being emitted, as
+  // downloadQslOnly() does from downloadQsoComplete(), is not called for
+  // that emission.)
+  disconnect(this, &MainWindow::download_finished, this, nullptr);
   connect(this, &MainWindow::download_finished, this, &MainWindow::downloadQslComplete);
   download(current_url);
 }
@@ -10273,12 +10289,12 @@ void MainWindow::on_actionUpload_to_LOTW_triggered()
   last_tx_label.setText(tr ("Uploading to LOTW..."));
   
   connect(upLotw, static_cast<void (QProcess::*) (int, QProcess::ExitStatus)> (&QProcess::finished),   //avt 4/1/25
-          [this] (int exitCode, QProcess::ExitStatus status) {
+          this, [this] (int exitCode, QProcess::ExitStatus status) {
             MainWindow::uploadLotwFinished (exitCode, status);
           });
   connect(upLotw, static_cast<void (QProcess::*) (QProcess::ProcessError)> (&QProcess::error),
-          [this] (QProcess::ProcessError error) {
-            MainWindow::lotwError (upLotw, error);
+          this, [this] (QProcess::ProcessError error) {
+            MainWindow::lotwError (error);
           });
   
   m_logbookRead = false;    //avt 4/5/25 block auto mode and requesting up/download
@@ -10299,9 +10315,7 @@ void MainWindow::uploadLotwFinished(int exitCode, QProcess::ExitStatus exitStatu
       debugToFile("actionUpl removed " + adiTmpFilePathName);
     }
     MessageBox::information_message (this, "TQSL stopped unexpectedly");
-    delete upLotw;
-    upLotw = nullptr;
-    updateModeCtrls();
+    finishLotwProcess();
     return;
   }
   
@@ -10363,19 +10377,34 @@ void MainWindow::uploadLotwFinished(int exitCode, QProcess::ExitStatus exitStatu
     QFile::remove(adiTmpFilePathName);
     debugToFile("actionUpl removed " + adiTmpFilePathName);
   }
-  delete upLotw;
-  upLotw = nullptr;
-  updateModeCtrls();
+  finishLotwProcess();
   cleanupAdiBackupFiles();
 }
 
-void MainWindow::lotwError (QProcess * process, QProcess::ProcessError)
+void MainWindow::lotwError (QProcess::ProcessError error)
 {
-  m_logbookRead = true;
-  debugToFile("lotwError error");
+  debugToFile("lotwError error:" + intToString(error));
+  // A crash is followed by finished(CrashExit), which reports it and
+  // cleans up; ReadError/WriteError/UnknownError don't stop the process,
+  // so finished() still follows. Only release the process here if it is
+  // no longer running, i.e. no finished() is coming.
+  if (error == QProcess::Crashed) return;
   MessageBox::warning_message (this, tr ("LOTW process error"));
-  delete process;
-  process = nullptr;  
+  if (upLotw && upLotw->state() == QProcess::NotRunning) finishLotwProcess();
+}
+
+void MainWindow::finishLotwProcess ()
+{
+  // Called from upLotw's own signal handlers: deleting the sender there is
+  // unsafe, so disconnect it (no further signals) and defer the delete.
+  // Clearing the member (not a copy) is what re-enables closing the window
+  // and further LotW uploads/downloads.
+  if (upLotw) {
+    upLotw->disconnect(this);
+    upLotw->deleteLater();
+    upLotw = nullptr;
+  }
+  m_logbookRead = true;
   updateModeCtrls();
 }
 
@@ -10604,7 +10633,7 @@ void MainWindow::write_transmit_entry (QString const& file_name)
     {
       auto const& message = tr ("Cannot open \"%1\" for append: %2")
         .arg (f.fileName ()).arg (f.errorString ());
-      QTimer::singleShot (0, [=] {                   // don't block guiUpdate
+      QTimer::singleShot (0, this, [=] {                   // don't block guiUpdate
           MessageBox::warning_message (this, tr ("Log File Error"), message);
         });
     }
