@@ -286,6 +286,7 @@ int WideGraph::fSpan()
 
 void WideGraph::setPeriod(int ntrperiod, int nsps)                  //SetPeriod
 {
+  if(ntrperiod<=0) return;                // never let the period divisor become 0
   m_TRperiod=ntrperiod;
   m_nsps=nsps;
   ui->widePlot->setNsps(ntrperiod, nsps);

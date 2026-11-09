@@ -97,8 +97,8 @@ private:
   QHash<QString, QVariant> m_fMinPerBand;
 
   qint32 m_waterfallAvg;
-  qint32 m_TRperiod;
-  qint32 m_nsps;
+  qint32 m_TRperiod {15};   // FT8 default until set; must never be 0 (divisor)
+  qint32 m_nsps {1920};    // FT8 default until set
   qint32 m_ntr0;
   qint32 m_fMax;
   qint32 m_nSubMode;

@@ -86,6 +86,11 @@ rm -rf "$work"
 (cd "$BUILD" && cpack -G DEB)
 deb=$(ls "$BUILD"/ft8-go_*.deb)
 version=$(dpkg-deb -f "$deb" Version)
+build_no=$(grep -oE '^[[:space:]]*return "[0-9]+";' "$SRC/revision_utils.cpp" | grep -oE '[0-9]+')
+case "$version" in
+  *-"$build_no"*) ;;
+  *) echo "Package version '$version' lacks the build number $build_no" >&2; exit 1 ;;
+esac
 mkdir -p "$DIST"
 out="$DIST/ft8-go_${version}_${TAG}.deb"
 cp "$deb" "$out"

@@ -75,7 +75,7 @@ private:
   qint32  m_h2;
   QPixmap m_HorizPixmap;
   qint32  m_jh0;
-  qint32  m_TRperiod;
+  qint32  m_TRperiod {15};   // FT8 default until set; must never be 0 (divisor)
 
   bool    m_bPaint2;
 };

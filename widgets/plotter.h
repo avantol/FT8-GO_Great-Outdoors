@@ -162,7 +162,7 @@ private:
   qint32  m_h;
   qint32  m_h1;
   qint32  m_h2;
-  qint32  m_TRperiod;
+  qint32  m_TRperiod {15};   // FT8 default until set; must never be 0 (divisor)
   qint32  m_rxFreq;
   qint32  m_txFreq;
   qint32  m_fMin;
