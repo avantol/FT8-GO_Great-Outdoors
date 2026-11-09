@@ -15,7 +15,10 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 
 bundled=
-if dpkg-deb -c "$DEB" | grep -q '\./usr/lib/ft8-go/'; then
+# (List the contents first: grep -q in a pipe would stop dpkg-deb early,
+# which pipefail counts as a failure.)
+contents=$(dpkg-deb -c "$DEB")
+if grep -q '\./usr/lib/ft8-go/' <<< "$contents"; then
   bundled=1
   # Stand-in for a desktop system: just the base packages the .deb
   # depends on (X11, sound, fonts, ...), none of Qt or the other
@@ -58,8 +61,8 @@ if [ -n "$bundled" ]; then
   useradd -m ft8test
   out=$(su ft8test -c 'QT_QPA_PLATFORM=offscreen QT_DEBUG_PLUGINS=1 wsjtx --version' 2>&1) || {
     echo "$out"; echo "wsjtx --version failed"; fail=1; }
-  echo "$out" | grep -iE 'version|loaded library|wsjt' | head -20
-  if ! echo "$out" | grep -q 'loaded library "/usr/lib/ft8-go/plugins/platforms/libqoffscreen.so"'; then
+  grep -iE 'version|loaded library|wsjt' <<< "$out" | head -20 || true
+  if ! grep -q 'loaded library "/usr/lib/ft8-go/plugins/platforms/libqoffscreen.so"' <<< "$out"; then
     echo "Qt didn't load its platform plugin from /usr/lib/ft8-go/plugins"; fail=1
   fi
 fi

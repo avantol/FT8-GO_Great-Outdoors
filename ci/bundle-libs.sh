@@ -68,7 +68,8 @@ done < <(find "$stage/usr/bin" "$stage/$PLUGDIR" -type f -print0)
 declare -A deps=()
 bundled=0
 for f in "${elves[@]}"; do
-  if ldd "$f" | grep -q "not found"; then
+  lddout=$(ldd "$f")
+  if grep -q "not found" <<< "$lddout"; then
     echo "Unresolved libraries in $f:" >&2; ldd "$f" >&2; exit 1
   fi
   while read -r soname path; do

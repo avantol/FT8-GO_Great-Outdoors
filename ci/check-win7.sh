@@ -30,7 +30,7 @@ while IFS= read -r -d '' f; do
     problems+=" subsystem=$major.$minor"
   fi
   dlls=$(echo "$p" | awk '/DLL Name:/{print tolower($3)}')
-  if echo "$dlls" | grep -qE '^(ucrtbase\.dll|api-ms-win-crt-)'; then
+  if grep -qE '^(ucrtbase\.dll|api-ms-win-crt-)' <<< "$dlls"; then
     problems+=" UCRT"
   fi
   apisets=$(echo "$dlls" | grep -E '^api-ms-win-' | grep -vE '^api-ms-win-crt-' | tr '\n' ' ' || true)
