@@ -89,6 +89,7 @@ jobs:
 
       - name: Test-install .deb in a clean container
         if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
+        timeout-minutes: 20
         run: |
           deb=$(ls dist/ft8-go_*_${{ matrix.tag }}.deb)
           docker run --rm --platform ${{ matrix.platform }} \

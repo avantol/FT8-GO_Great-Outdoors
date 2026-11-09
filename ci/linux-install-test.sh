@@ -56,11 +56,16 @@ if [ -n "$bundled" ]; then
   while IFS= read -r -d '' f; do
     check_libs "$f"
   done < <(find /usr/lib/ft8-go -name '*.so*' -type f -print0)
-  # Start the GUI program far enough to load Qt and a display plugin.
-  # Run it as a normal user, the way people will.
+  # Start the GUI program far enough to load Qt and a display plugin, as
+  # a normal user, the way people will. wsjtx --version shows the version
+  # in a dialog and waits for OK, so stop it after 30 s: still running
+  # then (exit 124) means it got that far.
   useradd -m ft8test
-  out=$(su ft8test -c 'QT_QPA_PLATFORM=offscreen QT_DEBUG_PLUGINS=1 wsjtx --version' 2>&1) || {
-    echo "$out"; echo "wsjtx --version failed"; fail=1; }
+  rc=0
+  out=$(su ft8test -c 'QT_QPA_PLATFORM=offscreen QT_DEBUG_PLUGINS=1 timeout 30 wsjtx --version' 2>&1) || rc=$?
+  if [ "$rc" != 0 ] && [ "$rc" != 124 ]; then
+    echo "$out"; echo "wsjtx --version failed (exit $rc)"; fail=1
+  fi
   grep -iE 'version|loaded library|wsjt' <<< "$out" | head -20 || true
   if ! grep -q 'loaded library "/usr/lib/ft8-go/plugins/platforms/libqoffscreen.so"' <<< "$out"; then
     echo "Qt didn't load its platform plugin from /usr/lib/ft8-go/plugins"; fail=1
