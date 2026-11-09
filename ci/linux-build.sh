@@ -5,7 +5,8 @@
 #   ci/linux-build.sh <target-tag>     e.g. ubuntu-16.04_i386
 #
 # Optional: FT8GO_VERSION_SUFFIX (e.g. +ci57) is appended to the package
-# revision for test builds.
+# revision for test builds. FT8GO_BUNDLE=1 makes the package self-contained
+# (bundles Qt and the other libraries; see ci/bundle-libs.sh).
 #
 # Run from the source tree root (as root, in a throwaway container).
 # The finished package is written to ./dist/ft8-go_<version>_<target-tag>.deb
@@ -26,6 +27,10 @@ if [ -n "$HAMLIB_TARBALL" ]; then
 else
   hamlib_pkgs="libhamlib-dev libhamlib-utils"
 fi
+bundle_pkgs=""
+if [ "${FT8GO_BUNDLE:-}" = 1 ]; then
+  bundle_pkgs="patchelf libqt5multimedia5-plugins"
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -34,9 +39,12 @@ apt-get install -y --no-install-recommends \
   qtbase5-dev qtmultimedia5-dev libqt5serialport5-dev \
   qttools5-dev qttools5-dev-tools libqt5sql5-sqlite \
   libfftw3-dev $hamlib_pkgs \
-  libusb-1.0-0-dev libudev-dev
+  libusb-1.0-0-dev libudev-dev $bundle_pkgs
 
 extra_cmake_args=()
+if [ "${FT8GO_BUNDLE:-}" = 1 ]; then
+  extra_cmake_args+=("-DFT8GO_QT_PLUGIN_DIR=/usr/lib/ft8-go/plugins")
+fi
 if [ -n "$HAMLIB_TARBALL" ]; then
   hl_build=$(mktemp -d)
   tar -xzf "$HAMLIB_TARBALL" -C "$hl_build" --strip-components=1
@@ -93,6 +101,10 @@ case "$version" in
 esac
 mkdir -p "$DIST"
 out="$DIST/ft8-go_${version}_${TAG}.deb"
-cp "$deb" "$out"
+if [ "${FT8GO_BUNDLE:-}" = 1 ]; then
+  bash "$SRC/ci/bundle-libs.sh" "$deb" "$out"
+else
+  cp "$deb" "$out"
+fi
 dpkg-deb --info "$out"
 echo "Built $out"

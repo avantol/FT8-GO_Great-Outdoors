@@ -103,6 +103,13 @@ int main(int argc, char *argv[])
   // Multiple instances communicate with jt9 via this
   QSharedMemory mem_jt9;
 
+#ifdef FT8GO_QT_PLUGIN_DIR
+  // Self-contained package (Ubuntu 16.04 / Linux Lite 3.4): load Qt's
+  // plugins only from the copies shipped with FT8-GO, which match its
+  // bundled Qt, rather than from wherever the system's Qt keeps them.
+  QCoreApplication::setLibraryPaths (QStringList {FT8GO_QT_PLUGIN_DIR});
+#endif
+
 #if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)                     //for Linux Lite 3.4 build only - avt 7/12/25
   QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);      //avt 6/14/25
 #endif

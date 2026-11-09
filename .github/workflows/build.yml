@@ -45,6 +45,9 @@ jobs:
             # Ubuntu 16.04's hamlib (1.2.15) is too old: build Hamlib from
             # source and link it statically, like the original Lite 3.4 .deb.
             hamlib_src: "4.6.5"
+            # Its package repositories are partly gone, so the .deb ships its
+            # own Qt and libraries and installs with no downloads.
+            bundle: true
           - tag: raspios-12_arm64
             image: debian:bookworm
             platform: linux/arm64
@@ -80,6 +83,7 @@ jobs:
         if: ${{ !matrix.slow || github.event_name != 'pull_request' }}
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
+            -e FT8GO_BUNDLE=${{ matrix.bundle && '1' || '' }} \
             -v "$PWD":/src -w /src ${{ matrix.image }} \
             bash ci/linux-build.sh ${{ matrix.tag }}
 
