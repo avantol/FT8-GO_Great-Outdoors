@@ -1282,6 +1282,15 @@ target_link_libraries (msk144sim wsjt_fort wsjt_cxx)
 
 endif(WSJT_BUILD_UTILS)
 
+# For self-contained packages that ship their own Qt (see
+# ci/bundle-libs.sh): the directory wsjtx loads Qt plugins from.
+set (FT8GO_QT_PLUGIN_DIR "" CACHE STRING
+  "Load Qt plugins only from this directory (self-contained packages)")
+if (FT8GO_QT_PLUGIN_DIR)
+  set_property (SOURCE main.cpp APPEND PROPERTY
+    COMPILE_DEFINITIONS "FT8GO_QT_PLUGIN_DIR=\"${FT8GO_QT_PLUGIN_DIR}\"")
+endif ()
+
 # build the main application
 add_executable (wsjtx MACOSX_BUNDLE
   ${wsjtx_CXXSRCS}
